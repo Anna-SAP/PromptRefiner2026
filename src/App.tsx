@@ -2,6 +2,7 @@ import { ImagePlus, Loader2, Square, Wand2 } from 'lucide-react';
 import { type DragEvent, type KeyboardEvent, useCallback, useRef, useState } from 'react';
 import { type EffortLevel, LIMITS, isEffortLevel } from '../shared/protocol';
 import ApiKeyDialog from './components/ApiKeyDialog';
+import BuildStamp, { hasBuildStamp } from './components/BuildStamp';
 import EffortSelect from './components/EffortSelect';
 import Header from './components/Header';
 import HistorySidebar from './components/HistorySidebar';
@@ -181,7 +182,13 @@ export default function App() {
         onImport={importItems}
       />
 
-      <main className="mx-auto max-w-7xl p-4 md:p-6 lg:h-[calc(100dvh-5rem)] lg:p-8">
+      {/* From lg up the two panels fill the viewport. Between lg and xl the
+          build stamp sits in a footer line, so the panels give up its height. */}
+      <main
+        className={`mx-auto max-w-7xl p-4 md:p-6 lg:p-8 ${
+          hasBuildStamp ? 'lg:h-[calc(100dvh-7.25rem)] xl:h-[calc(100dvh-5rem)]' : 'lg:h-[calc(100dvh-5rem)]'
+        }`}
+      >
         <div className="grid grid-cols-1 gap-6 lg:h-full lg:grid-cols-2">
           {/* Input */}
           <section
@@ -293,6 +300,13 @@ export default function App() {
           </section>
         </div>
       </main>
+
+      {/* The header has no room for the build stamp below xl, so show it here. */}
+      {hasBuildStamp && (
+        <footer className="flex h-9 items-start justify-center px-4 xl:hidden">
+          <BuildStamp />
+        </footer>
+      )}
     </div>
   );
 }
