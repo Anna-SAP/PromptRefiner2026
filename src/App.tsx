@@ -233,7 +233,9 @@ export default function App() {
             </div>
 
             <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-dark-border pt-4">
-              <div className="flex flex-col gap-1.5">
+              {/* Takes the room the button leaves, so a long effort description
+                  wraps inside this column instead of pushing the button down. */}
+              <div className="flex min-w-0 flex-[1_1_13rem] flex-col gap-1.5">
                 <EffortSelect value={effort} disabled={isGenerating} onChange={handleEffortChange} />
                 <span className={`text-xs ${overLimit ? 'text-red-400' : 'text-slate-500'}`}>
                   {overLimit
@@ -249,7 +251,7 @@ export default function App() {
                   type="button"
                   onClick={handleStop}
                   aria-label="Refining. Press to stop."
-                  className="flex items-center gap-2 rounded-xl bg-slate-700 px-6 py-3 font-semibold text-slate-200 shadow-lg transition-all hover:bg-slate-600"
+                  className="flex shrink-0 items-center gap-2 rounded-xl bg-slate-700 px-6 py-3 font-semibold text-slate-200 shadow-lg transition-all hover:bg-slate-600"
                 >
                   <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
                   Refining...
@@ -263,7 +265,7 @@ export default function App() {
                   type="button"
                   onClick={handleRefine}
                   disabled={!canRefine || overLimit}
-                  className="flex items-center gap-2 rounded-xl bg-brand-600 px-6 py-3 font-semibold text-white shadow-lg shadow-brand-900/20 transition-all hover:scale-[1.02] hover:bg-brand-500 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400 disabled:hover:scale-100"
+                  className="flex shrink-0 items-center gap-2 rounded-xl bg-brand-600 px-6 py-3 font-semibold text-white shadow-lg shadow-brand-900/20 transition-all hover:scale-[1.02] hover:bg-brand-500 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400 disabled:hover:scale-100"
                 >
                   <Wand2 className="h-5 w-5" aria-hidden />
                   Refine Prompt
