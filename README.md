@@ -99,6 +99,8 @@ npm run dev
 - **合并到 `main`**：类型检查 → 测试 → 构建在线版 → 检查产物中没有 API Key → 发布到 GitHub Pages。
 - **Pull Request**：执行同样的检查和构建，但不发布。
 
+每次构建都会把构建时刻写入页面：页头右侧显示 `built on 2026-11-10 15:38 UTC+8`（窄屏时显示在页面底部），`index.html` 里也有一条 `<meta name="build-time">`。时间在 `vite build` 运行时生成，固定按 UTC+8 显示，与访问者所在时区无关。
+
 工作流不需要任何 Secret。仓库的 Pages 来源需设置为 **GitHub Actions**（Settings → Pages → Build and deployment → Source）。
 
 ## 配置（自托管模式）

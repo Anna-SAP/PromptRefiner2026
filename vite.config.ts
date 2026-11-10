@@ -30,15 +30,38 @@ function contentSecurityPolicy(apiOrigin: string): Plugin {
   };
 }
 
+/**
+ * Records when the bundle was built, in index.html as well as in the app, so
+ * a deployment can be checked without running any JavaScript:
+ *   curl -s <site> | grep build-time
+ */
+function buildTimeMeta(buildTime: string): Plugin {
+  return {
+    name: 'prompt-refiner:build-time',
+    apply: 'build',
+    transformIndexHtml: () => [{ tag: 'meta', attrs: { name: 'build-time', content: buildTime }, injectTo: 'head' }],
+  };
+}
+
 // During development the Express server in server/index.ts mounts Vite as
 // middleware, so there is no separate dev-server port or proxy to configure.
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ mode, command }) => {
   const env = loadEnv(mode, process.cwd(), 'VITE_');
   const directMode = env.VITE_DIRECT_API === 'true';
   const apiOrigin = new URL(env.VITE_ANTHROPIC_BASE_URL || 'https://api.anthropic.com').origin;
+  // Taken once, when `vite build` runs: on GitHub Actions that is the moment
+  // the deployment is built. An ISO string is always UTC, so the value means
+  // the same thing whatever time zone the build machine is in.
+  const buildTime = command === 'build' ? new Date().toISOString() : null;
 
   return {
-    plugins: [react(), tailwindcss(), ...(directMode ? [contentSecurityPolicy(apiOrigin)] : [])],
+    define: { __BUILD_TIME__: JSON.stringify(buildTime) },
+    plugins: [
+      react(),
+      tailwindcss(),
+      ...(buildTime ? [buildTimeMeta(buildTime)] : []),
+      ...(directMode ? [contentSecurityPolicy(apiOrigin)] : []),
+    ],
     build: {
       target: 'es2022',
       outDir: 'dist',

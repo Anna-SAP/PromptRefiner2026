@@ -1,5 +1,11 @@
 /// <reference types="vite/client" />
 
+/**
+ * ISO 8601 UTC timestamp of the build, substituted by Vite (vite.config.ts).
+ * Null on the dev server; undefined where Vite is not involved, such as tests.
+ */
+declare const __BUILD_TIME__: string | null | undefined;
+
 interface ImportMetaEnv {
   /**
    * "true" builds the browser-only app (used for GitHub Pages): there is no

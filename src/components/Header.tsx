@@ -1,4 +1,5 @@
 import { History as HistoryIcon, KeyRound, RotateCcw, Sparkles } from 'lucide-react';
+import BuildStamp from './BuildStamp';
 
 interface HeaderProps {
   modelLabel: string;
@@ -23,6 +24,9 @@ export default function Header({ modelLabel, historyCount, onReset, onOpenHistor
       </div>
 
       <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+        {/* Only where the header has room for it; App shows it below the page on narrower screens. */}
+        <BuildStamp className="mr-1 hidden xl:inline" />
+
         <button
           type="button"
           onClick={onReset}
