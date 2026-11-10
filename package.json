@@ -1,0 +1,38 @@
+{
+  "name": "prompt-refiner-2026",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Turn rough ideas into focused, modern prompts. Powered by Anthropic Claude.",
+  "type": "module",
+  "engines": {
+    "node": ">=20.12"
+  },
+  "scripts": {
+    "dev": "node --watch --watch-preserve-output --import tsx server/index.ts",
+    "build": "vite build",
+    "build:pages": "cross-env VITE_DIRECT_API=true vite build --base=./",
+    "start": "cross-env NODE_ENV=production tsx server/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test shared/parseOutput.test.ts shared/validate.test.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.7.0",
+    "cross-env": "^7.0.3",
+    "express": "^5.1.0",
+    "lucide-react": "^1.71.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "tsx": "^4.20.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.0",
+    "@types/express": "^5.0.3",
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "tailwindcss": "^4.3.0",
+    "typescript": "^5.8.3",
+    "vite": "^6.4.0"
+  }
+}
