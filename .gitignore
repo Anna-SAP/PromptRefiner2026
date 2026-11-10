@@ -1,0 +1,32 @@
+# Dependencies and build output
+node_modules
+dist
+*.tsbuildinfo
+
+# Secrets — never commit real keys
+.env
+.env.*
+!.env.example
+*.local
+
+# Private keys and credential files, in case one is ever dropped here
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Machine-local Claude Code settings
+.claude/settings.local.json
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Editors / OS
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+Thumbs.db
+*.sw?
