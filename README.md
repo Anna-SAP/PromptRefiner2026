@@ -59,7 +59,7 @@ npm run dev
 - **多模态图片**：点击选择、粘贴或拖拽图片作为参考。过大的图片会在浏览器内自动缩小到 2000px 以内。
 - **历史记录**：保存在浏览器 `localStorage`，最多 50 条；支持搜索、单条删除、清空、导出与导入 JSON。
 - **思考过程摘要**：Claude 思考时实时显示推理摘要，等待不再是空白。
-- **思考深度**：Quick / Balanced / Deep 三档，对应 Claude 的 `effort` 参数（low / medium / high）。
+- **思考深度**：Quick / Balanced / Deep 三档，对应 Claude 的 `effort` 参数（low / medium / high）。选择器下方会显示当前档位的一句说明，鼠标悬停或键盘聚焦到其他档位时可预览其说明。
 - **随时停止**：生成中可中断，服务端会同步取消对 Claude 的请求，不再继续计费。
 - 快捷键 `Ctrl/⌘ + Enter` 提交。
 
