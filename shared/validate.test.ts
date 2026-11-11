@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { LIMITS } from './protocol';
+import { LIMITS, TARGET_MODELS } from './protocol';
 import { validateRefineRequest } from './validate';
 
 const PNG = { mediaType: 'image/png', data: 'iVBORw0KGgo=' };
@@ -14,7 +14,10 @@ function messageOf(body: unknown): string {
 describe('validateRefineRequest', () => {
   it('accepts a text-only request', () => {
     const result = validateRefineRequest({ inputText: 'Write a haiku' });
-    assert.deepEqual(result, { ok: true, value: { inputText: 'Write a haiku', images: [], effort: undefined } });
+    assert.deepEqual(result, {
+      ok: true,
+      value: { inputText: 'Write a haiku', images: [], effort: undefined, targetModel: undefined },
+    });
   });
 
   it('accepts an image-only request', () => {
@@ -60,5 +63,17 @@ describe('validateRefineRequest', () => {
 
   it('rejects an unknown effort level', () => {
     assert.match(messageOf({ inputText: 'x', effort: 'max' }), /effort/);
+  });
+
+  it('accepts each target model', () => {
+    for (const targetModel of TARGET_MODELS) {
+      const result = validateRefineRequest({ inputText: 'x', targetModel });
+      assert.equal(result.ok && result.value.targetModel, targetModel);
+    }
+  });
+
+  it('rejects an unknown target model', () => {
+    assert.match(messageOf({ inputText: 'x', targetModel: 'gpt-9' }), /targetModel/);
+    assert.match(messageOf({ inputText: 'x', targetModel: 'Claude Fable 5.2' }), /targetModel/);
   });
 });

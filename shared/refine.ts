@@ -1,6 +1,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import type { EffortLevel, RefineRequest, StreamEvent } from './protocol';
-import { SYSTEM_PROMPT, buildUserContent } from './prompt';
+import { DEFAULT_TARGET } from './defaults';
+import { buildSystemBlocks, buildUserContent } from './prompt';
 
 const FALLBACK_BETA = 'server-side-fallback-2026-07-01';
 
@@ -37,8 +38,8 @@ export async function runRefinement(
       // readable summary so the UI has something to show while it works.
       thinking: { type: 'adaptive', display: 'summarized' },
       output_config: { effort: options.effort },
-      // The system prompt is identical on every request, so mark it cacheable.
-      system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
+      // The system prompt depends only on the target model, so it is cacheable.
+      system: buildSystemBlocks(request.targetModel ?? DEFAULT_TARGET),
       messages: [{ role: 'user', content: buildUserContent(request) }],
       ...(options.useFallbacks ? { betas: [FALLBACK_BETA], fallbacks: 'default' as const } : {}),
     },

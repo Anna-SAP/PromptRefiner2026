@@ -11,6 +11,24 @@ export function isEffortLevel(value: unknown): value is EffortLevel {
   return typeof value === 'string' && (EFFORT_LEVELS as readonly string[]).includes(value);
 }
 
+/**
+ * The model the refined prompt is written for: the one the user will paste it
+ * into. This is separate from the model that does the refining. `generic`
+ * means no particular model, so only cross-model rules apply.
+ */
+export const TARGET_MODELS = [
+  'claude-fable-5-2',
+  'claude-opus-5-5',
+  'claude-sonnet-5-5',
+  'claude-haiku-5-5',
+  'generic',
+] as const;
+export type TargetModel = (typeof TARGET_MODELS)[number];
+
+export function isTargetModel(value: unknown): value is TargetModel {
+  return typeof value === 'string' && (TARGET_MODELS as readonly string[]).includes(value);
+}
+
 /** Image formats Claude's vision input accepts. */
 export const SUPPORTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'] as const;
 export type ImageMediaType = (typeof SUPPORTED_IMAGE_TYPES)[number];
@@ -41,6 +59,8 @@ export interface RefineRequest {
   inputText: string;
   images: RefineImage[];
   effort?: EffortLevel;
+  /** Absent means DEFAULT_TARGET. */
+  targetModel?: TargetModel;
 }
 
 export type RefineErrorCode =

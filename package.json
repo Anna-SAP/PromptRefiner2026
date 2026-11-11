@@ -13,7 +13,8 @@
     "build:pages": "cross-env VITE_DIRECT_API=true vite build --base=./",
     "start": "cross-env NODE_ENV=production tsx server/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test shared/parseOutput.test.ts shared/validate.test.ts src/lib/buildTime.test.ts"
+    "test": "tsx --test shared/parseOutput.test.ts shared/parseRationale.test.ts shared/rules.test.ts shared/validate.test.ts src/lib/buildTime.test.ts",
+    "check:links": "tsx scripts/check-rule-links.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.7.0",

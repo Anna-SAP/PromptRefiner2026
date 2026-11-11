@@ -1,6 +1,7 @@
 import { ImagePlus, Loader2, Square, Wand2 } from 'lucide-react';
 import { type DragEvent, type KeyboardEvent, useCallback, useRef, useState } from 'react';
-import { type EffortLevel, LIMITS, isEffortLevel } from '../shared/protocol';
+import { DEFAULT_TARGET } from '../shared/defaults';
+import { type EffortLevel, LIMITS, type TargetModel, isEffortLevel, isTargetModel } from '../shared/protocol';
 import ApiKeyDialog from './components/ApiKeyDialog';
 import BuildStamp, { hasBuildStamp } from './components/BuildStamp';
 import EffortSelect from './components/EffortSelect';
@@ -8,6 +9,7 @@ import Header from './components/Header';
 import HistorySidebar from './components/HistorySidebar';
 import ImageUploader from './components/ImageUploader';
 import RefineOutput from './components/RefineOutput';
+import TargetSelect from './components/TargetSelect';
 import { useApiKey } from './hooks/useApiKey';
 import { useAppConfig } from './hooks/useAppConfig';
 import { useHistory } from './hooks/useHistory';
@@ -18,7 +20,17 @@ import { DIRECT_MODE } from './lib/mode';
 import type { HistoryItem } from './types';
 
 const EFFORT_STORAGE_KEY = 'prompt_refiner_effort';
+const TARGET_STORAGE_KEY = 'prompt_refiner_target';
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
+
+function readStoredTarget(): TargetModel {
+  try {
+    const stored = localStorage.getItem(TARGET_STORAGE_KEY);
+    return isTargetModel(stored) ? stored : DEFAULT_TARGET;
+  } catch {
+    return DEFAULT_TARGET;
+  }
+}
 
 function readStoredEffort(): EffortLevel | null {
   try {
@@ -40,6 +52,7 @@ export default function App() {
   const [isDragging, setIsDragging] = useState(false);
   const [effortChoice, setEffortChoice] = useState<EffortLevel | null>(readStoredEffort);
   const effort = effortChoice ?? appConfig.defaultEffort;
+  const [targetModel, setTargetModel] = useState<TargetModel>(readStoredTarget);
 
   const attachments = useImageAttachments();
   const { history, add: addToHistory, remove, clear, importItems } = useHistory();
@@ -76,6 +89,7 @@ export default function App() {
         data: dataUrlToBase64(image.dataUrl),
       })),
       effort,
+      targetModel,
     });
   };
 
@@ -134,6 +148,15 @@ export default function App() {
     setEffortChoice(value);
     try {
       localStorage.setItem(EFFORT_STORAGE_KEY, value);
+    } catch {
+      // Preference just won't persist.
+    }
+  };
+
+  const handleTargetChange = (value: TargetModel) => {
+    setTargetModel(value);
+    try {
+      localStorage.setItem(TARGET_STORAGE_KEY, value);
     } catch {
       // Preference just won't persist.
     }
@@ -235,7 +258,8 @@ export default function App() {
             <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-dark-border pt-4">
               {/* Takes the room the button leaves, so a long effort description
                   wraps inside this column instead of pushing the button down. */}
-              <div className="flex min-w-0 flex-[1_1_13rem] flex-col gap-1.5">
+              <div className="flex min-w-0 flex-[1_1_13rem] flex-col gap-3">
+                <TargetSelect value={targetModel} disabled={isGenerating} onChange={handleTargetChange} />
                 <EffortSelect value={effort} disabled={isGenerating} onChange={handleEffortChange} />
                 <span className={`text-xs ${overLimit ? 'text-red-400' : 'text-slate-500'}`}>
                   {overLimit
