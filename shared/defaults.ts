@@ -1,8 +1,10 @@
-import type { EffortLevel } from './protocol';
+import type { EffortLevel, TargetModel } from './protocol';
 
 /** Defaults shared by the server and the browser-only (GitHub Pages) build. */
 export const DEFAULT_MODEL = 'claude-fable-5-2';
 export const DEFAULT_EFFORT: EffortLevel = 'medium';
+/** The model a refined prompt is written for when the request does not say. */
+export const DEFAULT_TARGET: TargetModel = 'claude-fable-5-2';
 /** Thinking tokens count toward this ceiling, so it is deliberately roomy. */
 export const DEFAULT_MAX_TOKENS = 64_000;
 

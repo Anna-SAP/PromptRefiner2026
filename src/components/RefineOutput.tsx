@@ -1,8 +1,10 @@
 import { AlertTriangle, Brain, Check, ChevronDown, Copy, Loader2, Terminal, Zap } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { formatForCopy, parseRefineOutput } from '../../shared/parseOutput';
+import { splitRationale } from '../../shared/parseRationale';
 import { useCopy } from '../hooks/useCopy';
 import type { RefineStatus } from '../types';
+import RationalePanel from './RationalePanel';
 
 interface RefineOutputProps {
   status: RefineStatus;
@@ -63,7 +65,11 @@ function ThinkingPanel({ thinking, active }: { thinking: string; active: boolean
 
 export default function RefineOutput({ status, output, thinking, error, truncated }: RefineOutputProps) {
   const isStreaming = status === 'generating';
-  const parsed = useMemo(() => parseRefineOutput(output), [output]);
+  // The rationale block is cut off first. Everything below that reads or
+  // copies the analysis and the prompt works on `answer`, which has no
+  // rationale in it.
+  const { main: answer, rationale } = useMemo(() => splitRationale(output), [output]);
+  const parsed = useMemo(() => parseRefineOutput(answer), [answer]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const pinnedToBottom = useRef(true);
 
@@ -98,7 +104,7 @@ export default function RefineOutput({ status, output, thinking, error, truncate
         </h2>
         {output && !isStreaming && (
           <CopyButton
-            text={formatForCopy(output)}
+            text={formatForCopy(answer)}
             label="Copy Full Text"
             className="flex items-center gap-2 rounded-lg border border-dark-border bg-dark-surface px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:bg-dark-border"
           />
@@ -152,10 +158,12 @@ export default function RefineOutput({ status, output, thinking, error, truncate
             </div>
             <pre className="p-4 font-mono text-sm leading-relaxed break-words whitespace-pre-wrap text-brand-50/90">
               {parsed.prompt}
-              {cursor}
+              {!rationale.started && cursor}
             </pre>
           </section>
         )}
+
+        {rationale.started && <RationalePanel rationale={rationale} cursor={cursor} />}
 
         {status === 'stopped' && (
           <p className="mt-4 text-xs text-slate-500">Stopped before the result was complete. It was not saved to history.</p>

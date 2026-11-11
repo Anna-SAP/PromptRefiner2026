@@ -1,9 +1,11 @@
 import {
   LIMITS,
+  TARGET_MODELS,
   type RefineImage,
   type RefineRequest,
   isEffortLevel,
   isImageMediaType,
+  isTargetModel,
 } from './protocol';
 
 export type ValidationResult =
@@ -31,7 +33,7 @@ export function validateRefineRequest(body: unknown): ValidationResult {
   if (typeof body !== 'object' || body === null) {
     return fail('Request body must be a JSON object.');
   }
-  const { inputText = '', images = [], effort } = body as Record<string, unknown>;
+  const { inputText = '', images = [], effort, targetModel } = body as Record<string, unknown>;
 
   if (typeof inputText !== 'string') {
     return fail('"inputText" must be a string.');
@@ -47,6 +49,9 @@ export function validateRefineRequest(body: unknown): ValidationResult {
   }
   if (effort !== undefined && !isEffortLevel(effort)) {
     return fail('"effort" must be one of: low, medium, high.');
+  }
+  if (targetModel !== undefined && !isTargetModel(targetModel)) {
+    return fail(`"targetModel" must be one of: ${TARGET_MODELS.join(', ')}.`);
   }
 
   const cleanImages: RefineImage[] = [];
@@ -78,5 +83,5 @@ export function validateRefineRequest(body: unknown): ValidationResult {
     return fail('Provide a draft prompt or at least one image.');
   }
 
-  return { ok: true, value: { inputText, images: cleanImages, effort } };
+  return { ok: true, value: { inputText, images: cleanImages, effort, targetModel } };
 }

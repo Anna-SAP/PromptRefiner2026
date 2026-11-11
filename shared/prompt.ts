@@ -1,15 +1,20 @@
 import type Anthropic from '@anthropic-ai/sdk';
-import type { RefineRequest } from './protocol';
+import type { RefineRequest, TargetModel } from './protocol';
+import { REFINER_EDIT_RULE, TARGETS, rulesForTarget } from './rules';
 
 /**
  * The meta-prompt: what Claude is told about the job of refining a prompt.
  *
- * It is written the way it asks Claude to write — goal and reasons first, few
- * hard rules, each rule carrying its "why". It is a constant on purpose: a
- * byte-stable system prompt is what lets prompt caching reuse it across
- * requests, so nothing per-request (dates, user names, ids) belongs in here.
+ * It has two parts. BASE_PROMPT is the same on every request. The target
+ * section (buildTargetSection) depends only on the target model the user
+ * picked, and holds the rules from that model's prompting guide.
+ *
+ * Both are written the way they ask Claude to write — goal and reasons first,
+ * few hard rules, each rule carrying its "why". Both are byte-stable on
+ * purpose: that is what lets prompt caching reuse them across requests, so
+ * nothing per-request (dates, user names, ids) belongs in here.
  */
-export const SYSTEM_PROMPT = `You are the refinement engine inside Prompt Refiner, a tool people use to turn a rough request into a prompt they will paste into a state-of-the-art AI model.
+const BASE_PROMPT = `You are the refinement engine inside Prompt Refiner, a tool people use to turn a rough request into a prompt they will paste into a state-of-the-art AI model. The <target_model> section at the end says which model that is.
 
 <task>
 The user message holds a draft prompt inside <raw_request> tags, sometimes with reference images. Rewrite the draft into the prompt that will get the best result from a highly capable model.
@@ -33,6 +38,8 @@ Where the draft gives the reason behind a constraint, keep the reason: a model t
 Match the shape to the content. A simple request becomes a few clear sentences. Use headings or sections only when the prompt has parts that are distinct in kind, such as reference material and instructions.
 
 If the draft is already focused, change little and say so. Improving a prompt sometimes means leaving most of it alone.
+
+The <target_model> section lists rules from the published prompting guidance for the model the prompt will run on. Apply a rule where the draft meets the condition the rule states, and only there. Some rules add a sentence to the prompt, or remove a line from it, that the draft did not ask for. That is their purpose, and it is the one exception to not inventing requirements. A rule is not a licence to make up task details: when a rule needs a fact the draft does not give, use a bracketed placeholder.
 </approach>
 
 <images>
@@ -40,11 +47,11 @@ Attached images are reference material for the draft: screenshots, mockups, char
 </images>
 
 <language>
-Write both the analysis and the refined prompt in the language of the draft: a Simplified Chinese draft gets a Simplified Chinese result, an English draft an English one. In a mixed-language draft follow the dominant language and keep technical terms, product names, and code as written. If the draft explicitly asks for the prompt in another language, follow that. For a draft with images and no text, use the language of the text in the images, or English if there is none.
+Write the analysis, the refined prompt and the sentences of the rationale in the language of the draft: a Simplified Chinese draft gets a Simplified Chinese result, an English draft an English one. In a mixed-language draft follow the dominant language and keep technical terms, product names, and code as written. If the draft explicitly asks for the prompt in another language, follow that. For a draft with images and no text, use the language of the text in the images, or English if there is none.
 </language>
 
 <output_format>
-Reply with exactly these two blocks and nothing outside them:
+Reply with exactly these three blocks, in this order, and nothing outside them:
 
 <analysis>
 One to three sentences for the user about the edit: what you cut, what you sharpened, and any gap they should fill.
@@ -52,9 +59,55 @@ One to three sentences for the user about the edit: what you cut, what you sharp
 <refined_prompt>
 The refined prompt, ready to paste, with no commentary and no surrounding code fence.
 </refined_prompt>
+<rationale target="...">
+<change rule="rule-id">One sentence: what you changed in the prompt, and why the rule called for it in this draft.</change>
+</rationale>
 
-The app locates these two tags to lay out the result, so write them exactly as shown and do not use them inside the prompt itself.
+The <target_model> section gives the exact opening tag for the rationale block. The rationale lets the user check each change against its source. The app shows it beside the prompt and never copies it with the prompt, so the refined prompt must be complete without it and must not refer to it.
+
+Write one <change> for each distinct edit you made, the most significant first. Its rule attribute is the id of the rule in <target_model> that the edit rests on. An edit that rests on the approach above and on no listed rule takes rule="${REFINER_EDIT_RULE}". Cite a rule only for an edit that is in the refined prompt; leave out rules you considered and did not use. Do not write document names, section names or links in the rationale: the app attaches the source to each rule id, and an id that is not in the list has no source to show. If you changed nothing, leave the block empty.
+
+The app locates these tags to lay out the result, so write them exactly as shown and do not use them inside the prompt itself.
 </output_format>`;
+
+/**
+ * The part of the meta-prompt that changes with the target model: which model
+ * the refined prompt is for, and the rules from Anthropic's guidance for it.
+ * The rule text lives in rules.ts, next to the source of each rule.
+ */
+export function buildTargetSection(target: TargetModel): string {
+  const intro =
+    target === 'generic'
+      ? 'No particular model is targeted. The refined prompt may be run on any current Claude model, so the rules below are the ones that hold across those models.'
+      : `The refined prompt will be run on ${TARGETS[target].label}. The rules below are the ones from Anthropic's prompting guidance that apply when writing for that model.`;
+  const rules = rulesForTarget(target)
+    .map((rule) => `[${rule.id}] ${rule.instruction}`)
+    .join('\n\n');
+  return `<target_model>
+${intro} The id in brackets is how you cite a rule in the rationale.
+
+${rules}
+
+Open the rationale block with exactly this tag: <rationale target="${target}">
+</target_model>`;
+}
+
+/**
+ * The system prompt as content blocks. The base block is identical for every
+ * target, so it is cached once and shared; the target block is cached per
+ * target.
+ */
+export function buildSystemBlocks(target: TargetModel): Anthropic.Beta.BetaTextBlockParam[] {
+  return [
+    { type: 'text', text: BASE_PROMPT, cache_control: { type: 'ephemeral' } },
+    { type: 'text', text: buildTargetSection(target), cache_control: { type: 'ephemeral' } },
+  ];
+}
+
+/** The whole meta-prompt for a target as one string, for tests and inspection. */
+export function buildSystemPrompt(target: TargetModel): string {
+  return `${BASE_PROMPT}\n\n${buildTargetSection(target)}`;
+}
 
 const IMAGE_ONLY_NOTE = '(No text was provided. The draft is the attached image or images.)';
 

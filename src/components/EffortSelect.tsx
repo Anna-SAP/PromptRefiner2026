@@ -1,10 +1,18 @@
 import { useId, useState } from 'react';
 import type { EffortLevel } from '../../shared/protocol';
 
+// The wording follows "Calibrate effort" in Anthropic's guide to prompting
+// Claude Fable 5.2, the model this app refines with by default: `high` is the
+// recommended starting point, `medium` suits everyday work, and effort barely
+// changes the length of a reply.
 const OPTIONS: { value: EffortLevel; label: string; hint: string }[] = [
   { value: 'low', label: 'Quick', hint: 'Fastest and cheapest, for simple requests.' },
-  { value: 'medium', label: 'Balanced', hint: 'A good default for everyday prompts.' },
-  { value: 'high', label: 'Deep', hint: 'Thinks longest, for complex prompts.' },
+  { value: 'medium', label: 'Balanced', hint: 'The everyday default here. Enough for most prompts.' },
+  {
+    value: 'high',
+    label: 'Deep',
+    hint: 'Anthropic’s recommended starting point for Claude Fable 5.2. Noticeably slower.',
+  },
 ];
 
 interface EffortSelectProps {
@@ -65,12 +73,16 @@ export default function EffortSelect({ value, disabled, onChange }: EffortSelect
             id={`${id}-${option.value}`}
             className={`col-start-1 row-start-1 ${option.value === described ? '' : 'invisible'}`}
           >
-            <span className="font-medium text-slate-300">{option.label}</span>
+            <span className="font-medium text-slate-300">
+              {option.label} ({option.value})
+            </span>
             <span aria-hidden> · </span>
             {option.hint}
           </p>
         ))}
       </div>
+
+      <p className="text-xs text-slate-500">Effort sets how much Claude thinks, not how long the result is.</p>
     </div>
   );
 }

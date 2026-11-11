@@ -51,15 +51,18 @@ npm run dev
 | `npm start` | 生产模式：先 `npm run build`，再用它提供服务 |
 | `npm run build:pages` | 构建在线版（纯静态、浏览器直连）到 `dist/` |
 | `npm run typecheck` | TypeScript 类型检查 |
-| `npm test` | 单元测试（输出解析器、请求校验） |
+| `npm test` | 单元测试（输出解析器、rationale 解析、规则目录、请求校验） |
+| `npm run check:links` | 联网检查规则目录里每条来源链接：指南页面可访问，且存在对应章节锚点 |
 
 ## 功能
 
-- **提示词精炼**：流式输出，分为「Analysis（改了什么）」和「Refined Prompt（可直接复制）」两部分。
+- **提示词精炼**：流式输出，分为「Analysis（改了什么）」和「Refined Prompt（可直接复制）」两部分，下方另有只供核对的「Why these changes」。
+- **目标模型**：选择精炼后的提示词要交给哪个模型——Claude Fable 5.2 / Opus 5.5 / Sonnet 5.5 / Haiku 5.5 / Generic（通用）。选定后，元提示词换用该模型官方 prompting 指南里的规则（见下文「按目标模型区分的规则」），不只是换个标签。它与页头的「Powered by …」（执行精炼的模型）是两回事。
+- **改动依据（rationale）**：每处改动列出四项——改了什么、依据哪条规则、来源文档与章节链接、适用哪个模型。这一块只在界面上显示，「Copy Prompt」和「Copy Full Text」都不包含它。
 - **多模态图片**：点击选择、粘贴或拖拽图片作为参考。过大的图片会在浏览器内自动缩小到 2000px 以内。
 - **历史记录**：保存在浏览器 `localStorage`，最多 50 条；支持搜索、单条删除、清空、导出与导入 JSON。
 - **思考过程摘要**：Claude 思考时实时显示推理摘要，等待不再是空白。
-- **思考深度**：Quick / Balanced / Deep 三档，对应 Claude 的 `effort` 参数（low / medium / high）。选择器下方会显示当前档位的一句说明，鼠标悬停或键盘聚焦到其他档位时可预览其说明。
+- **思考深度**：Quick / Balanced / Deep 三档，对应 Claude 的 `effort` 参数（low / medium / high）。Deep（high）是 Anthropic 对 Claude Fable 5.2 的官方推荐起点；Balanced（medium）仍是本工具的日常默认。effort 决定 Claude 思考多少，不改变结果的长度。选择器下方会显示当前档位的一句说明，鼠标悬停或键盘聚焦到其他档位时可预览其说明。
 - **随时停止**：生成中可中断，服务端会同步取消对 Claude 的请求，不再继续计费。
 - 快捷键 `Ctrl/⌘ + Enter` 提交。
 
@@ -80,6 +83,24 @@ npm run dev
 - 每条规则都带上原因，而不是用大写强调；不凭空添加字数、格式等用户没提的要求。
 - 说明如何处理图片：下游模型可能看不到图片，所以把任务依赖的细节写进提示词。
 - 输出改用 `<analysis>` / `<refined_prompt>` 标签，而不是 Markdown 代码块。这样即使精炼后的提示词本身包含代码块，也不会被截断。
+
+**按目标模型区分的规则**
+
+元提示词由两部分组成：所有请求共用的基础部分，以及随目标模型变化的 `<target_model>` 部分。后者的规则全部来自 Anthropic 官方 prompting 指南，逐条登记在 [shared/rules.ts](shared/rules.ts)，每条都带来源文档、章节和锚点：
+
+| 目标模型 | 规则来源 |
+| --- | --- |
+| Claude Fable 5.2 | [Prompting Claude Fable 5.2](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-2) + 通用最佳实践 |
+| Claude Opus 5.5 | [Prompting Claude Opus 5.5](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5-5) + 通用最佳实践 |
+| Claude Sonnet 5.5 | [Prompting Claude Sonnet 5.5](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-sonnet-5-5) + 通用最佳实践 |
+| Claude Haiku 5.5 | [Prompting Claude Haiku 5.5](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-haiku-5-5) + 通用最佳实践 |
+| Generic（通用） | 仅 [Prompting best practices](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices) |
+
+- 每个目标都包含两条规则：**做完整个任务再汇报**（普通障碍自行处理，只在不可逆操作或需要用户决定时停下），以及**审批类规则把例外写进同一句**（不只写 NEVER）。前者在每份指南里各有对应章节；后者只有 Fable 5.2 指南写明，对其他目标是作为本工具自己的规则套用的，界面上会注明这一点。
+- 模型在 `<rationale>` 里只引用规则 id，来源和链接由应用从 `rules.ts` 查出后显示。模型不写链接，所以界面上出现的链接只可能是 `rules.ts` 里登记过的；引用了未登记 id 的条目会显示「无来源」。
+- 没有官方规则可依的改动（例如删掉寒暄）标为 `refiner-edit`，界面上明确写「不来自 Anthropic 指南」。
+- `<rationale>` 由 [shared/parseRationale.ts](shared/parseRationale.ts) 先从回答末尾切下，剩余部分原样交给原有的 `parseRefineOutput`，所以 `<analysis>` / `<refined_prompt>` 的解析行为不变。历史记录仍只保存模型的原始回答，字段没有变化。
+- 指南会修订。改动 `rules.ts` 后，或隔一段时间，运行 `npm run check:links` 复查链接。
 
 **架构**
 
@@ -119,27 +140,29 @@ npm run dev
 ## 使用 Claude Fable 5.2 的注意事项
 
 - **数据保留**：Fable 5.2 要求组织启用 30 天数据保留，零数据保留（ZDR）的组织会收到 400 错误。遇到这种情况可把 `REFINER_MODEL` 改为 `claude-opus-5-5`。
-- **响应时间**：模型始终会先思考。Deep 档位明显更慢，日常使用 Balanced 即可。
+- **响应时间**：模型始终会先思考。Deep（high）是官方推荐起点，但明显更慢；日常使用默认的 Balanced（medium）即可。
 - **拒答回退的可用范围**：`fallbacks` 仅在 Claude API、Claude Platform on AWS 和 Google Cloud（Anthropic 托管）上可用。通过 Bedrock、Vertex AI 或 Foundry 接入时，请设置 `REFINER_FALLBACKS=off`。
 
 ## 目录结构
 
 ```
 shared/           服务端与浏览器共用
-  prompt.ts       元提示词与用户消息的构建
+  prompt.ts       元提示词（基础部分 + 按目标模型生成的规则部分）与用户消息的构建
+  rules.ts        规则目录：每条规则的文本、来源指南、章节锚点、适用模型；各目标模型用哪些规则
   refine.ts       调用 Claude Messages API 的唯一入口（流式）
   protocol.ts     请求、事件类型与限制
   validate.ts     请求校验
   errors.ts       SDK 错误到用户提示的映射
   parseOutput.ts  把模型输出解析为 analysis + prompt（支持流式与旧格式）
-  defaults.ts     默认模型、思考深度、输出上限
+  parseRationale.ts  把 <rationale> 块从回答末尾切下并解析为逐条改动（只用于界面显示）
+  defaults.ts     默认模型、思考深度、目标模型、输出上限
 server/           自托管模式
   index.ts        Express 启动；开发时挂载 Vite，生产时提供 dist/
   refine.ts       POST /api/refine：以 SSE 流式返回
   config.ts       环境变量
 src/
   App.tsx
-  components/     Header、HistorySidebar、ImageUploader、RefineOutput、EffortSelect、ApiKeyDialog
+  components/     Header、HistorySidebar、ImageUploader、RefineOutput、RationalePanel、TargetSelect、EffortSelect、ApiKeyDialog
   hooks/          useRefine、useHistory、useImageAttachments、useApiKey、useAppConfig、useCopy
   lib/
     refineClient.ts   按构建模式选择传输方式；自托管模式的 SSE 客户端
@@ -147,5 +170,7 @@ src/
     apiKey.ts         在线版：用户 Key 的本地存取
     mode.ts           构建模式开关
     images.ts         图片压缩
+scripts/
+  check-rule-links.ts   联网检查 rules.ts 里的来源链接和章节锚点
 .github/workflows/deploy.yml   构建并发布到 GitHub Pages
 ```
