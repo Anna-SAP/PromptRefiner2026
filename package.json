@@ -14,7 +14,8 @@
     "start": "cross-env NODE_ENV=production tsx server/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test shared/parseOutput.test.ts shared/parseRationale.test.ts shared/rules.test.ts shared/validate.test.ts src/lib/buildTime.test.ts",
-    "check:links": "tsx scripts/check-rule-links.ts"
+    "check:links": "tsx scripts/check-rule-links.ts",
+    "check:quotes": "tsx scripts/check-talk-quotes.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.7.0",

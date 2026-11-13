@@ -1,7 +1,8 @@
-import { AlertTriangle, Brain, Check, ChevronDown, Copy, Loader2, Terminal, Zap } from 'lucide-react';
+import { AlertTriangle, Brain, Check, ChevronDown, Copy, Database, Loader2, Terminal, Zap } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { formatForCopy, parseRefineOutput } from '../../shared/parseOutput';
 import { splitRationale } from '../../shared/parseRationale';
+import type { Usage } from '../../shared/protocol';
 import { useCopy } from '../hooks/useCopy';
 import type { RefineStatus } from '../types';
 import RationalePanel from './RationalePanel';
@@ -12,6 +13,7 @@ interface RefineOutputProps {
   thinking: string;
   error: string | null;
   truncated: boolean;
+  usage: Usage | null;
 }
 
 function CopyButton({ text, label, className }: { text: string; label: string; className: string }) {
@@ -21,6 +23,31 @@ function CopyButton({ text, label, className }: { text: string; label: string; c
       {copied ? <Check size={14} className="text-green-400" aria-hidden /> : <Copy size={14} aria-hidden />}
       <span aria-live="polite">{copied ? 'Copied' : label}</span>
     </button>
+  );
+}
+
+const count = (tokens: number) => tokens.toLocaleString('en-US');
+
+/**
+ * One line on what the request used, so the prompt cache's hit rate is
+ * visible: the meta-prompt is the same on every request for a target, and a
+ * cache read is billed at a fraction of the normal input rate.
+ */
+function UsageLine({ usage }: { usage: Usage }) {
+  const input = usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens;
+  const cache =
+    usage.cacheReadTokens > 0
+      ? `${count(usage.cacheReadTokens)} (${Math.round((usage.cacheReadTokens / input) * 100)}%) read from the prompt cache`
+      : usage.cacheWriteTokens > 0
+        ? `${count(usage.cacheWriteTokens)} written to the prompt cache for the next refinement`
+        : 'prompt cache not used';
+  return (
+    <p className="mt-4 flex items-start gap-2 text-xs text-slate-500">
+      <Database size={12} className="mt-0.5 shrink-0" aria-hidden />
+      <span>
+        Input {count(input)} tokens, {cache}. Output {count(usage.outputTokens)} tokens, thinking included.
+      </span>
+    </p>
   );
 }
 
@@ -63,7 +90,7 @@ function ThinkingPanel({ thinking, active }: { thinking: string; active: boolean
   );
 }
 
-export default function RefineOutput({ status, output, thinking, error, truncated }: RefineOutputProps) {
+export default function RefineOutput({ status, output, thinking, error, truncated, usage }: RefineOutputProps) {
   const isStreaming = status === 'generating';
   // The rationale block is cut off first. Everything below that reads or
   // copies the analysis and the prompt works on `answer`, which has no
@@ -164,6 +191,8 @@ export default function RefineOutput({ status, output, thinking, error, truncate
         )}
 
         {rationale.started && <RationalePanel rationale={rationale} cursor={cursor} />}
+
+        {status === 'complete' && usage && <UsageLine usage={usage} />}
 
         {status === 'stopped' && (
           <p className="mt-4 text-xs text-slate-500">Stopped before the result was complete. It was not saved to history.</p>

@@ -78,6 +78,10 @@ export async function runRefinement(
     usage: {
       inputTokens: message.usage.input_tokens,
       outputTokens: message.usage.output_tokens,
+      // The system prompt is the cacheable part. Reporting these lets the UI
+      // show whether the cache is being hit, the number to watch for cost.
+      cacheReadTokens: message.usage.cache_read_input_tokens ?? 0,
+      cacheWriteTokens: message.usage.cache_creation_input_tokens ?? 0,
     },
   });
 }

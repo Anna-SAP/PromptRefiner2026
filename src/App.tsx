@@ -321,6 +321,7 @@ export default function App() {
                 thinking={refiner.thinking}
                 error={refiner.error}
                 truncated={refiner.truncated}
+                usage={refiner.usage}
               />
             </div>
           </section>

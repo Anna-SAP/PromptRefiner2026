@@ -3,11 +3,13 @@ import { type ReactNode, useState } from 'react';
 import type { ParsedRationale, RationaleEntry } from '../../shared/parseRationale';
 import { type TargetModel, isTargetModel } from '../../shared/protocol';
 import {
-  GUIDES,
   REFINER_EDIT_RULE,
+  type RuleSource,
   TARGETS,
   findRule,
   isOutsideScope,
+  isTalkSource,
+  sourceLabel,
   sourceUrl,
 } from '../../shared/rules';
 
@@ -23,6 +25,34 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
       <dt className="text-xs font-semibold tracking-wider text-slate-500 uppercase">{label}</dt>
       <dd className="min-w-0 text-sm leading-relaxed break-words text-slate-300">{children}</dd>
     </div>
+  );
+}
+
+/**
+ * One source: a documentation section, or a passage of the talk with the
+ * words it is quoted for. The link and label come from shared/rules.ts only.
+ */
+function Source({ source }: { source: RuleSource }) {
+  return (
+    <li>
+      <a
+        href={sourceUrl(source)}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex items-baseline gap-1 text-brand-300 underline decoration-brand-300/40 underline-offset-2 hover:text-brand-200"
+      >
+        <span>
+          {isTalkSource(source) && <span className="sr-only">Talk: </span>}
+          {sourceLabel(source)}
+        </span>
+        <ExternalLink size={12} className="shrink-0 self-center" aria-hidden />
+      </a>
+      {isTalkSource(source) && (
+        <blockquote className="mt-1 border-l border-slate-600 pl-2 text-xs text-slate-400 italic">
+          {source.quotes.map((quote) => `“${quote}”`).join(' … ')}
+        </blockquote>
+      )}
+    </li>
   );
 }
 
@@ -51,8 +81,8 @@ function Entry({ entry, target, cursor }: { entry: RationaleEntry; target: Targe
         </Field>
         <Field label="Source">
           {isRefinerEdit
-            ? 'None. This change does not rest on a rule from an Anthropic guide.'
-            : 'None, so this change cannot be checked against a guide.'}
+            ? 'None. This change does not rest on a rule from Anthropic’s guides or the talk.'
+            : 'None, so this change cannot be checked against a source.'}
         </Field>
         <Field label="Applies to">{isRefinerEdit ? 'Any target model' : 'Unknown'}</Field>
       </dl>
@@ -66,23 +96,17 @@ function Entry({ entry, target, cursor }: { entry: RationaleEntry; target: Targe
         <span className="font-medium text-slate-200">{rule.title}.</span> {rule.instruction}
       </Field>
       <Field label="Source">
-        <ul className="space-y-1">
+        <ul className="space-y-1.5">
           {rule.sources.map((source) => (
-            <li key={`${source.guide}#${source.anchor}`}>
-              <a
-                href={sourceUrl(source)}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-baseline gap-1 text-brand-300 underline decoration-brand-300/40 underline-offset-2 hover:text-brand-200"
-              >
-                <span>
-                  {GUIDES[source.guide].title} › {source.section}
-                </span>
-                <ExternalLink size={12} className="shrink-0 self-center" aria-hidden />
-              </a>
-            </li>
+            <Source key={sourceUrl(source)} source={source} />
           ))}
         </ul>
+        {rule.sources.some(isTalkSource) && (
+          <p className="mt-1 text-xs text-slate-500">
+            Talk quotes are copied from its automatic transcript, recognition errors included. The time is where the
+            passage starts in the recording.
+          </p>
+        )}
         {rule.note && <p className="mt-1 text-xs text-slate-400">{rule.note}</p>}
       </Field>
       <Field label="Applies to">
@@ -100,8 +124,9 @@ function Entry({ entry, target, cursor }: { entry: RationaleEntry; target: Targe
 
 /**
  * The reasons behind the edit: one entry per change, each with the rule it
- * rests on, the guide section that states the rule, and the models the rule
- * is for. Display only; nothing here is ever copied with the prompt.
+ * rests on, the guide sections and talk passages that state the rule, and the
+ * models the rule is for. Display only; nothing here is ever copied with the
+ * prompt.
  */
 export default function RationalePanel({ rationale, cursor }: RationalePanelProps) {
   const [open, setOpen] = useState(true);

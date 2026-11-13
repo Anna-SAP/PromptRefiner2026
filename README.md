@@ -52,13 +52,15 @@ npm run dev
 | `npm run build:pages` | 构建在线版（纯静态、浏览器直连）到 `dist/` |
 | `npm run typecheck` | TypeScript 类型检查 |
 | `npm test` | 单元测试（输出解析器、rationale 解析、规则目录、请求校验） |
-| `npm run check:links` | 联网检查规则目录里每条来源链接：指南页面可访问，且存在对应章节锚点 |
+| `npm run check:links` | 联网检查规则目录里每条文档链接：页面可访问，且存在对应章节锚点和标题 |
+| `npm run check:quotes -- <转录文件>` | 逐字核对视频来源的引文：每段引文都必须出现在转录中所注时间段内（转录文件不在仓库里，需自备） |
 
 ## 功能
 
 - **提示词精炼**：流式输出，分为「Analysis（改了什么）」和「Refined Prompt（可直接复制）」两部分，下方另有只供核对的「Why these changes」。
 - **目标模型**：选择精炼后的提示词要交给哪个模型——Claude Fable 5.2 / Opus 5.5 / Sonnet 5.5 / Haiku 5.5 / Generic（通用）。选定后，元提示词换用该模型官方 prompting 指南里的规则（见下文「按目标模型区分的规则」），不只是换个标签。它与页头的「Powered by …」（执行精炼的模型）是两回事。
-- **改动依据（rationale）**：每处改动列出四项——改了什么、依据哪条规则、来源文档与章节链接、适用哪个模型。这一块只在界面上显示，「Copy Prompt」和「Copy Full Text」都不包含它。
+- **改动依据（rationale）**：每处改动列出四项——改了什么、依据哪条规则、来源（官方文档的章节链接，或视频的时间段链接加转录原话）、适用哪个模型。这一块只在界面上显示，「Copy Prompt」和「Copy Full Text」都不包含它。
+- **用量与缓存命中**：每次精炼完成后，结果下方显示本次输入、输出的 token 数，以及输入中有多少是从提示词缓存读取的。元提示词对同一目标模型的每次请求都相同，所以连续精炼时应当大部分命中缓存；缓存读取按普通输入价格的一小部分计费。历史记录不保存这一行。
 - **多模态图片**：点击选择、粘贴或拖拽图片作为参考。过大的图片会在浏览器内自动缩小到 2000px 以内。
 - **历史记录**：保存在浏览器 `localStorage`，最多 50 条；支持搜索、单条删除、清空、导出与导入 JSON。
 - **思考过程摘要**：Claude 思考时实时显示推理摘要，等待不再是空白。
@@ -86,7 +88,7 @@ npm run dev
 
 **按目标模型区分的规则**
 
-元提示词由两部分组成：所有请求共用的基础部分，以及随目标模型变化的 `<target_model>` 部分。后者的规则全部来自 Anthropic 官方 prompting 指南，逐条登记在 [shared/rules.ts](shared/rules.ts)，每条都带来源文档、章节和锚点：
+元提示词由两部分组成：所有请求共用的基础部分，以及随目标模型变化的 `<target_model>` 部分。后者的规则来自两类出处，逐条登记在 [shared/rules.ts](shared/rules.ts)：Anthropic 官方文档（每条带文档、章节和锚点），以及 Anthropic 工程师 Lance Martin 的演讲（每条带转录时间段和逐字原话，见下文「来自演讲的规则」）。各目标模型的官方规则来源：
 
 | 目标模型 | 规则来源 |
 | --- | --- |
@@ -101,6 +103,22 @@ npm run dev
 - 没有官方规则可依的改动（例如删掉寒暄）标为 `refiner-edit`，界面上明确写「不来自 Anthropic 指南」。
 - `<rationale>` 由 [shared/parseRationale.ts](shared/parseRationale.ts) 先从回答末尾切下，剩余部分原样交给原有的 `parseRefineOutput`，所以 `<analysis>` / `<refined_prompt>` 的解析行为不变。历史记录仍只保存模型的原始回答，字段没有变化。
 - 指南会修订。改动 `rules.ts` 后，或隔一段时间，运行 `npm run check:links` 复查链接。
+
+**来自演讲的规则**
+
+来源是 [Your Old Prompts Are Making Claude Worse](https://www.youtube.com/watch?v=ys6YQ2yfBpM)（Lance Martin, Anthropic，AI Engineer 2026 年 10 月）。核心观点：提示词会像代码一样积累「债务」，为旧模型写的加码句和互相矛盾的规则在前沿模型上会增加成本、甚至降低质量；提示词缓存是严格的前缀匹配；评分提示词要用能稳定复现的判据。这四条规则不针对某个模型，所有目标模型都会用到，排在该模型自己的规则之后：
+
+| 规则 id | 做什么 | 视频出处（转录时间） | 对应的官方文档 |
+| --- | --- | --- | --- |
+| `talk-try-harder-lines` | 删掉为旧模型写的「多想、多查」句：`think step by step`、`double-check your work` 这类验证仪式、`be maximally thorough` 这类加码、规定思考步骤或草稿区。任务本身要求的检查（如报告前跑测试）和其他规则明确要加的句子保留；在 Analysis 里说明控制思考量的是 effort 设置 | 01:00–02:20、04:50–05:00 | Prompting best practices › Overthinking and excessive thoroughness |
+| `talk-contradictions` | 草稿里互相矛盾的指令不再原样并存：草稿能看出谁优先就留那条，各有适用情形就写清何时用哪条；看不出就在提示词里放一个方括号问题，并在 Analysis 里指出 | 02:30–02:40、05:00 | 无，仅有演讲 |
+| `talk-stable-prefix` | 会被应用反复发送的 system prompt，按变化频率排序：对所有请求都相同的内容在前，按项目或会话固定的内容（用户名、会话开始日期）在后；每次请求都变的值（当前时间、请求 id、轮次计数）移出 system prompt，并在 Analysis 里说明应放进用户消息 | 06:10–06:20、07:00–07:11、07:50 | Prompt caching › Structuring your prompt；What invalidates the cache |
+| `talk-grader-checks` | 评分 / 评审 / LLM-as-judge 类提示词里没定义各档含义的分数（如「1 到 10 分打分」），改成逐项的通过 / 不通过判据；比较两个输出的保留为二选一；草稿已逐档定义的量表保留 | 31:00–31:11、31:50、34:00–34:10 | Define success criteria and build evaluations › Tips for LLM-based grading |
+
+- 每条演讲来源在界面上显示为「演讲标题 › 时间段」，链接跳到 YouTube 对应秒数，下方附转录原话。原话照抄自动转录，识别错误也原样保留，这样才能逐字核对；`npm run check:quotes -- <转录文件>` 会检查每段原话都出现在所注时间段的转录行里。
+- 边界也写进了规则备注，界面上可见：演讲认为 5.5 代模型已不需要这些加码句，而这些句子大约从 Claude Opus 4.5 起开始失去作用，演讲者自己说这条线并不精确（50:00–50:10）；对 Haiku 是否还需要少量加码，演讲者也不确定（50:30–50:40）。72% 的降本数字来自修正内部基准测试框架的缓存用法，不是改写提示词的效果。官方评测文档也接受细则清楚的 1–5 分量表，所以 `talk-grader-checks` 只替换没定义档位的量表。
+- 规则之间不能互相打架（这本身就是演讲的观点之一）：`talk-try-harder-lines` 不会删掉 Sonnet 5.5 指南要求的「Think the problem through before you answer.」和编码规则要求的真实检查；Haiku 5.5 的日期规则改为「在会话开始时填一次，放在不变的指令之后」，与 `talk-stable-prefix` 一致。单元测试锁住了这几处。
+- 同一处改动有多条规则可依据时，元提示词要求引用最贴近目标模型的那条（例如面向 Opus 5.5 的聊天提示词里删除「think carefully」时引用 `opus-no-think-lines`）。
 
 **架构**
 
@@ -148,7 +166,7 @@ npm run dev
 ```
 shared/           服务端与浏览器共用
   prompt.ts       元提示词（基础部分 + 按目标模型生成的规则部分）与用户消息的构建
-  rules.ts        规则目录：每条规则的文本、来源指南、章节锚点、适用模型；各目标模型用哪些规则
+  rules.ts        规则目录：每条规则的文本、来源（文档章节锚点，或演讲时间段与原话）、适用模型；各目标模型用哪些规则
   refine.ts       调用 Claude Messages API 的唯一入口（流式）
   protocol.ts     请求、事件类型与限制
   validate.ts     请求校验
@@ -171,6 +189,7 @@ src/
     mode.ts           构建模式开关
     images.ts         图片压缩
 scripts/
-  check-rule-links.ts   联网检查 rules.ts 里的来源链接和章节锚点
+  check-rule-links.ts   联网检查 rules.ts 里的文档链接和章节锚点
+  check-talk-quotes.ts  对照演讲转录逐字核对 rules.ts 里的引文和时间段
 .github/workflows/deploy.yml   构建并发布到 GitHub Pages
 ```

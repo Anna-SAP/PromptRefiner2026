@@ -1,6 +1,8 @@
 /**
- * Checks that every source link in shared/rules.ts still resolves: the guide
- * page loads and has a heading with the cited anchor.
+ * Checks that every documentation link in shared/rules.ts still resolves: the
+ * page loads and has a heading with the cited anchor and heading text. Talk
+ * sources are not web pages with anchors; `npm run check:quotes` checks them
+ * against the transcript instead.
  *
  *   npm run check:links
  *
@@ -8,7 +10,7 @@
  * `npm test`. Run it after editing rules.ts, and from time to time, because
  * the guides are revised.
  */
-import { ALL_RULES, GUIDES, type GuideId, sourceUrl } from '../shared/rules';
+import { ALL_RULES, GUIDES, type GuideId, isTalkSource, sourceUrl } from '../shared/rules';
 
 const pages = new Map<GuideId, string>();
 let failures = 0;
@@ -30,6 +32,7 @@ for (const [guide, { title, url }] of Object.entries(GUIDES) as [GuideId, { titl
 
 for (const rule of ALL_RULES) {
   for (const source of rule.sources) {
+    if (isTalkSource(source)) continue;
     const html = pages.get(source.guide);
     if (!html) continue;
     const hasAnchor = new RegExp(`<h[1-6][^>]*\\bid="${source.anchor}"`).test(html);

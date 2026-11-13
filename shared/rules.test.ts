@@ -4,17 +4,27 @@ import { buildSystemBlocks, buildSystemPrompt, buildTargetSection } from './prom
 import { TARGET_MODELS } from './protocol';
 import {
   ALL_RULES,
+  CROSS_MODEL_GUIDES,
+  DOCS_ROOT,
   GUIDES,
+  type GuideSource,
   REFINER_EDIT_RULE,
+  TALK,
   TARGETS,
+  type TalkSource,
   findRule,
   isOutsideScope,
+  isTalkSource,
   rulesForTarget,
+  sourceLabel,
   sourceUrl,
+  timestampSeconds,
 } from './rules';
 
-const DOCS = 'https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/';
 const ids = (target: (typeof TARGET_MODELS)[number]) => rulesForTarget(target).map((rule) => rule.id);
+const guideSources = (sources: readonly (typeof ALL_RULES)[number]['sources'][number][]) =>
+  sources.filter((source): source is GuideSource => !isTalkSource(source));
+const TALK_RULES = ALL_RULES.filter((rule) => rule.id.startsWith('talk-'));
 
 describe('rule catalogue', () => {
   it('has unique ids, none of them the reserved one', () => {
@@ -23,16 +33,39 @@ describe('rule catalogue', () => {
     assert.ok(!all.includes(REFINER_EDIT_RULE));
   });
 
-  it('gives every rule a source in an official guide', () => {
+  it('gives every rule a source in Anthropic’s documentation or the talk', () => {
     for (const rule of ALL_RULES) {
       assert.ok(rule.sources.length > 0, `${rule.id} has no source`);
       for (const source of rule.sources) {
         const url = sourceUrl(source);
-        assert.ok(url.startsWith(DOCS), `${rule.id}: ${url}`);
-        assert.match(url, /#[a-z0-9-]+$/, `${rule.id}: ${url}`);
-        assert.ok(source.section.length > 0);
+        if (isTalkSource(source)) {
+          assert.equal(url, `${TALK.url}&t=${timestampSeconds(source.start)}s`, rule.id);
+          assert.ok(source.quotes.length > 0 && source.quotes.every((quote) => quote.trim()), `${rule.id}: empty quote`);
+          assert.ok(timestampSeconds(source.start) <= timestampSeconds(source.end), `${rule.id}: start after end`);
+          assert.ok(timestampSeconds(source.end) <= TALK.durationSeconds, `${rule.id}: past the end of the talk`);
+        } else {
+          assert.ok(url.startsWith(`${DOCS_ROOT}/`), `${rule.id}: ${url}`);
+          assert.match(url, /#[a-z0-9-]+$/, `${rule.id}: ${url}`);
+          assert.ok(source.section.length > 0);
+        }
       }
     }
+  });
+
+  it('backs every talk-sourced rule with a passage of the talk, for all models', () => {
+    assert.equal(TALK_RULES.length, 4);
+    for (const rule of TALK_RULES) {
+      assert.ok(rule.sources.some(isTalkSource), `${rule.id} cites no passage of the talk`);
+      assert.equal(rule.scope, 'all', rule.id);
+    }
+  });
+
+  it('labels and links a talk passage by its start time', () => {
+    const source: TalkSource = { kind: 'talk', start: '07:00', end: '07:11', quotes: ['x'] };
+    assert.equal(sourceUrl(source), `${TALK.url}&t=420s`);
+    assert.match(sourceLabel(source), /07:00–07:11$/);
+    assert.match(sourceLabel({ ...source, end: '07:00' }), /› 07:00$/);
+    assert.throws(() => timestampSeconds('7 min'));
   });
 
   it('takes a model-specific rule only from that model’s guide', () => {
@@ -43,8 +76,11 @@ describe('rule catalogue', () => {
       'claude-haiku-5-5': 'haiku-5-5',
     } as const;
     for (const rule of ALL_RULES) {
-      const expected = rule.scope === 'all' ? 'best-practices' : guideOf[rule.scope];
-      for (const source of rule.sources) assert.equal(source.guide, expected, rule.id);
+      for (const source of guideSources(rule.sources)) {
+        if (rule.scope === 'all') assert.ok(CROSS_MODEL_GUIDES.includes(source.guide), `${rule.id}: ${source.guide}`);
+        else assert.equal(source.guide, guideOf[rule.scope], rule.id);
+      }
+      if (rule.scope !== 'all') assert.ok(!rule.sources.some(isTalkSource), `${rule.id}: talk rules hold for all models`);
     }
   });
 
@@ -69,16 +105,32 @@ describe('rules per target', () => {
     }
   });
 
-  it('limits the generic target to the best-practices guide, plus the exception rule', () => {
+  it('limits the generic target to cross-model sources, plus the exception rule', () => {
     for (const rule of rulesForTarget('generic')) {
       if (rule.id === 'fable-exception-in-rule') continue;
-      assert.deepEqual(
-        rule.sources.map((source) => source.guide),
-        rule.sources.map(() => 'best-practices'),
-        rule.id,
-      );
+      for (const source of guideSources(rule.sources)) {
+        assert.ok(CROSS_MODEL_GUIDES.includes(source.guide), `${rule.id}: ${source.guide}`);
+      }
     }
     assert.deepEqual(TARGETS.generic.guides, ['best-practices']);
+  });
+
+  it('gives every target the talk-sourced rules', () => {
+    for (const target of TARGET_MODELS) {
+      for (const rule of TALK_RULES) assert.ok(ids(target).includes(rule.id), `${target}: ${rule.id}`);
+    }
+  });
+
+  it('keeps the talk rules from clashing with the rules beside them', () => {
+    // Sonnet 5.5's guide asks for "Think the problem through" before a JSON
+    // answer, and the coding rules ask for a real check: the talk rule that
+    // removes thinking and checking lines must leave those alone.
+    const tryHarder = findRule('talk-try-harder-lines')?.instruction ?? '';
+    assert.match(tryHarder, /another rule in this list asks for/);
+    assert.match(tryHarder, /running the project's tests/);
+    // The Haiku date line and the cache rule agree on where a date goes.
+    assert.match(findRule('haiku-search-date')?.instruction ?? '', /once when the conversation starts/);
+    assert.match(findRule('talk-stable-prefix')?.instruction ?? '', /date the session started/);
   });
 
   it('includes both owner-requested rules for every target', () => {
@@ -100,10 +152,12 @@ describe('rules per target', () => {
   });
 
   it('names the guides each target draws on', () => {
+    const supporting = CROSS_MODEL_GUIDES.filter((guide) => guide !== 'best-practices');
     for (const target of TARGET_MODELS) {
-      const used = new Set(rulesForTarget(target).flatMap((rule) => rule.sources.map((source) => source.guide)));
+      const used = new Set(rulesForTarget(target).flatMap((rule) => guideSources(rule.sources).map((source) => source.guide)));
       for (const guide of TARGETS[target].guides) assert.ok(GUIDES[guide], guide);
-      if (target !== 'generic') assert.deepEqual([...used].sort(), [...new Set([...TARGETS[target].guides, 'fable-5-2'])].sort());
+      const expected = [...TARGETS[target].guides, 'fable-5-2', ...supporting];
+      if (target !== 'generic') assert.deepEqual([...used].sort(), [...new Set(expected)].sort());
     }
   });
 });
