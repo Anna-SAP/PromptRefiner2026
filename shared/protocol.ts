@@ -75,6 +75,17 @@ export type RefineErrorCode =
   | 'incomplete'
   | 'server';
 
+/** Token counts for one refinement, as the API reports them. */
+export interface Usage {
+  /** Input tokens after the last cache breakpoint: billed at the full input rate. */
+  inputTokens: number;
+  outputTokens: number;
+  /** Input tokens read from the prompt cache: billed at a fraction of the input rate. */
+  cacheReadTokens: number;
+  /** Input tokens written to the prompt cache on this request. */
+  cacheWriteTokens: number;
+}
+
 /** Events the server streams back over SSE, one JSON object per `data:` line. */
 export type StreamEvent =
   /** A piece of Claude's summarized reasoning, shown while the answer forms. */
@@ -87,7 +98,7 @@ export type StreamEvent =
       model: string;
       /** True when the answer hit the output-token ceiling and was cut short. */
       truncated: boolean;
-      usage: { inputTokens: number; outputTokens: number };
+      usage: Usage;
     }
   | { type: 'error'; code: RefineErrorCode; message: string };
 

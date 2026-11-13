@@ -3,29 +3,55 @@ import type { TargetModel } from './protocol';
 /**
  * The prompting rules the meta-prompt applies, and where each one comes from.
  *
- * Every rule here is taken from one of Anthropic's published prompting guides.
+ * Every rule here rests on one of two kinds of source:
+ *
+ * - a page of Anthropic's documentation, cited by section heading and anchor;
+ * - a passage of Lance Martin's talk "Your Old Prompts Are Making Claude Worse"
+ *   (Anthropic, AI Engineer, October 2026), cited by its start and end time in
+ *   the talk's transcript, with the words quoted exactly as transcribed.
+ *
  * The model that does the refinement is given the rules for the chosen target
  * and cites them by id in its <rationale> block; the app then looks the id up
- * here to show the rule, its source section and the link. The model never
- * writes a link itself, so a link in the UI can only be one listed in this file.
+ * here to show the rule, its sources and the links. The model never writes a
+ * link itself, so a link in the UI can only be one listed in this file.
  *
  * Section anchors were checked against the `id` attributes of the headings on
- * the live pages. `npm run check:links` repeats that check.
+ * the live pages; `npm run check:links` repeats that check. Talk quotes were
+ * checked word for word against the transcript; `npm run check:quotes --
+ * <transcript>` repeats that check.
  */
 
-export type GuideId = 'best-practices' | 'fable-5-2' | 'opus-5-5' | 'sonnet-5-5' | 'haiku-5-5';
+export type GuideId =
+  | 'best-practices'
+  | 'fable-5-2'
+  | 'opus-5-5'
+  | 'sonnet-5-5'
+  | 'haiku-5-5'
+  | 'prompt-caching'
+  | 'develop-tests';
 
-const DOCS_BASE = 'https://platform.claude.com/docs/en/build-with-claude/prompt-engineering';
+export const DOCS_ROOT = 'https://platform.claude.com/docs/en';
+const PROMPTING = `${DOCS_ROOT}/build-with-claude/prompt-engineering`;
 
 export const GUIDES: Record<GuideId, { title: string; url: string }> = {
-  'best-practices': { title: 'Prompting best practices', url: `${DOCS_BASE}/claude-prompting-best-practices` },
-  'fable-5-2': { title: 'Prompting Claude Fable 5.2', url: `${DOCS_BASE}/prompting-claude-fable-5-2` },
-  'opus-5-5': { title: 'Prompting Claude Opus 5.5', url: `${DOCS_BASE}/prompting-claude-opus-5-5` },
-  'sonnet-5-5': { title: 'Prompting Claude Sonnet 5.5', url: `${DOCS_BASE}/prompting-claude-sonnet-5-5` },
-  'haiku-5-5': { title: 'Prompting Claude Haiku 5.5', url: `${DOCS_BASE}/prompting-claude-haiku-5-5` },
+  'best-practices': { title: 'Prompting best practices', url: `${PROMPTING}/claude-prompting-best-practices` },
+  'fable-5-2': { title: 'Prompting Claude Fable 5.2', url: `${PROMPTING}/prompting-claude-fable-5-2` },
+  'opus-5-5': { title: 'Prompting Claude Opus 5.5', url: `${PROMPTING}/prompting-claude-opus-5-5` },
+  'sonnet-5-5': { title: 'Prompting Claude Sonnet 5.5', url: `${PROMPTING}/prompting-claude-sonnet-5-5` },
+  'haiku-5-5': { title: 'Prompting Claude Haiku 5.5', url: `${PROMPTING}/prompting-claude-haiku-5-5` },
+  // Not prompting guides, but the documentation pages behind two talk-sourced rules.
+  'prompt-caching': { title: 'Prompt caching', url: `${DOCS_ROOT}/build-with-claude/prompt-caching` },
+  'develop-tests': {
+    title: 'Define success criteria and build evaluations',
+    url: `${DOCS_ROOT}/test-and-evaluate/develop-tests`,
+  },
 };
 
-export interface RuleSource {
+/** The documentation pages written for every current model rather than for one. */
+export const CROSS_MODEL_GUIDES: readonly GuideId[] = ['best-practices', 'prompt-caching', 'develop-tests'];
+
+/** A section of a documentation page. */
+export interface GuideSource {
   guide: GuideId;
   /** The section heading as it reads on the page. */
   section: string;
@@ -33,8 +59,58 @@ export interface RuleSource {
   anchor: string;
 }
 
+/**
+ * The talk the talk-sourced rules come from. The recording is the full
+ * session, Q&A included; times are positions in it, as the transcript gives them.
+ */
+export const TALK = {
+  title: 'Your Old Prompts Are Making Claude Worse',
+  speaker: 'Lance Martin, Anthropic',
+  url: 'https://www.youtube.com/watch?v=ys6YQ2yfBpM',
+  /** Length of the recording, in seconds. */
+  durationSeconds: 3842,
+} as const;
+
+/** A passage of the talk. */
+export interface TalkSource {
+  kind: 'talk';
+  /** Where the passage starts, as `mm:ss`: the time of the transcript line it starts in. */
+  start: string;
+  /** The time of the transcript line it ends in, as `mm:ss`. */
+  end: string;
+  /**
+   * Words from the passage, copied exactly from the automatic transcript,
+   * recognition errors included. Each string appears in the transcript lines
+   * from `start` to `end`, read as one text.
+   */
+  quotes: string[];
+}
+
+export type RuleSource = GuideSource | TalkSource;
+
+export function isTalkSource(source: RuleSource): source is TalkSource {
+  return 'kind' in source && source.kind === 'talk';
+}
+
+/** `mm:ss` to seconds. */
+export function timestampSeconds(time: string): number {
+  const match = /^(\d{1,2}):([0-5]\d)$/.exec(time);
+  if (!match) throw new Error(`Not an mm:ss time: ${time}`);
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
 export function sourceUrl(source: RuleSource): string {
+  if (isTalkSource(source)) return `${TALK.url}&t=${timestampSeconds(source.start)}s`;
   return `${GUIDES[source.guide].url}#${source.anchor}`;
+}
+
+/** How the source is named in the UI. */
+export function sourceLabel(source: RuleSource): string {
+  if (isTalkSource(source)) {
+    const span = source.start === source.end ? source.start : `${source.start}–${source.end}`;
+    return `${TALK.title} (${TALK.speaker}) › ${span}`;
+  }
+  return `${GUIDES[source.guide].title} › ${source.section}`;
 }
 
 export interface PromptRule {
@@ -45,7 +121,7 @@ export interface PromptRule {
   instruction: string;
   sources: RuleSource[];
   /**
-   * Who the source guide wrote the rule for: every current Claude model, or one
+   * Who the source wrote the rule for: every current Claude model, or one
    * model. A rule can be applied to a target outside its scope (see
    * `fable-exception-in-rule`); the UI says so when that happens.
    */
@@ -65,7 +141,8 @@ export const REFINER_EDIT_RULE = 'refiner-edit';
 const ALL_MODELS = 'All current Claude models';
 const FABLE_MODELS = 'Claude Fable 5.2 and Claude Mythos 5.2';
 
-const bp = (section: string, anchor: string): RuleSource => ({ guide: 'best-practices', section, anchor });
+const bp = (section: string, anchor: string): GuideSource => ({ guide: 'best-practices', section, anchor });
+const talk = (start: string, end: string, quotes: string[]): TalkSource => ({ kind: 'talk', start, end, quotes });
 
 const RULES: PromptRule[] = [
   // --- Prompting best practices: techniques for all current models -----------
@@ -172,6 +249,97 @@ const RULES: PromptRule[] = [
     note: 'The linked section covers which actions go ahead and which need confirmation; its example names Claude Opus 4.6. "Finish before reporting" is Prompt Refiner\'s own rule. The model-specific guides state it for their own models.',
   },
 
+  // --- Lance Martin's talk "Your Old Prompts Are Making Claude Worse" ----------
+  // Cross-model rules from the talk, each backed by Anthropic documentation
+  // where a page covers the same point. Quotes are verbatim from the automatic
+  // transcript; see TalkSource.
+  {
+    id: 'talk-try-harder-lines',
+    title: 'Remove "think harder" and "check twice" lines',
+    instruction:
+      'Remove lines written to make older models think, check or try harder: "think step by step", verification rituals such as "double-check your work", thoroughness boosters such as "be maximally thorough", and scratchpads or set procedures for how to reason. Current models decide how much to think and check their own work, and these lines spend tokens and can lower quality. Keep a check that is part of the task itself, such as running the project\'s tests before reporting, and keep a line that another rule in this list asks for under its own condition. Say in the analysis that the effort setting, not the wording of the prompt, controls how much the model thinks.',
+    sources: [
+      talk('01:00', '02:20', [
+        'prompts accumulate debt just like code',
+        'we used to use verification rituals, double check your work',
+        "You don't need that anymore.",
+        'They naturally verify their work.',
+        'when you do these things, it actually increases cost and can reduce performance',
+      ]),
+      talk('04:50', '05:00', [
+        "it's removing verification rituals boosters",
+        'So this little simple command, often will basically reduce token use, saving cost',
+      ]),
+      bp('Overthinking and excessive thoroughness', 'overthinking-and-excessive-thoroughness'),
+    ],
+    scope: 'all',
+    appliesTo: ALL_MODELS,
+    note: 'The talk says the current 5.5 generation no longer needs these lines, and puts the point where they stopped helping at about Claude Opus 4.5, which it calls a rough line (50:00–50:10). It was unsure whether Haiku still benefits from a few more boosters (50:30–50:40), so check results on Haiku.',
+  },
+  {
+    id: 'talk-contradictions',
+    title: 'Resolve contradictory instructions',
+    instruction:
+      'When two instructions in the draft contradict each other, do not keep both as they stand. If the draft shows which one wins, keep that one; if each holds in different cases, say when each applies. If the draft does not settle it, put one bracketed question in the prompt, such as [which comes first: short replies or full detail?], and point out the conflict in the analysis. Earlier models tended to ignore one of two clashing rules; current models follow both closely and are confused by the clash.',
+    sources: [
+      talk('02:30', '02:40', [
+        "if your prompt had contradictory rules in them, earlier models that weren't as good at instruction following, would kind of ignore one of the two rules, so kind of still worked.",
+        "But with frontier models, they'll often get confused by contradictory rules.",
+      ]),
+      talk('05:00', '05:00', [
+        'it can improve performance in cases where things like contradictory prompts were confusing',
+      ]),
+    ],
+    scope: 'all',
+    appliesTo: ALL_MODELS,
+    note: 'No section of Anthropic\'s prompting guides states this rule; its only source is the talk.',
+  },
+  {
+    id: 'talk-stable-prefix',
+    title: 'Keep the reusable part of a system prompt the same',
+    instruction:
+      'When the draft is a system prompt that an application or agent sends with many requests, order it by how often each part changes: what is the same for every request (instructions, tool guidance, reference material) first, then what is fixed for one project or session, such as the user\'s name or the date the session started. Values that change with every request, such as the current time, a request id or a turn counter, do not belong in the system prompt: take them out and say in the analysis that the application should send them in the user message. Prompt caching reuses a prompt only up to the first changed character, so a timestamp near the top makes everything after it be processed and billed at the full rate again. Leave a prompt that is sent once, or that has no changing values, in its order.',
+    sources: [
+      talk('06:10', '06:20', [
+        'prompt cache are a strict prefix match, so any even a byte change in your prefix will invalidate the cache.',
+      ]),
+      talk('07:00', '07:11', [
+        'system instructions, tools, things that are globally cached across all of your sessions.',
+        'Session state is kind of per session and then messages kind of increment each turn.',
+      ]),
+      talk('07:50', '07:50', [
+        'We found opportunities to reduce cost by up to 72% with no meaningful change in performance.',
+      ]),
+      { guide: 'prompt-caching', section: 'Structuring your prompt', anchor: 'structuring-your-prompt' },
+      { guide: 'prompt-caching', section: 'What invalidates the cache', anchor: 'what-invalidates-the-cache' },
+    ],
+    scope: 'all',
+    appliesTo: ALL_MODELS,
+    note: 'In the talk the 72% figure comes from fixing cache use in the harnesses of internal benchmarks, not from rewording prompts. How much a cache read saves depends on the model; see the pricing in the linked guide.',
+  },
+  {
+    id: 'talk-grader-checks',
+    title: 'Grading prompts: clear pass/fail checks',
+    instruction:
+      'When the draft asks the model to grade or judge output (an evaluator, reviewer or LLM-as-judge prompt) on a scale whose levels it does not define, such as "rate this from 1 to 10", rewrite the criteria as pass/fail checks, one for each quality the draft cares about, each worded so that two people would apply it the same way. When the draft compares two outputs, keep it a choice between the two rather than a separate score for each. Keep a scale whose levels the draft defines. A loosely defined number scale gives noisy grades that change from run to run.',
+    sources: [
+      talk('31:00', '31:11', [
+        'Make it crisp and simple, like ideally a binary classification, good versus bad.',
+        'you can set up like multiple binary classifiers',
+        "give Claude like from 1 to 10 rate this, that's extremely noisy.",
+      ]),
+      talk('31:50', '31:50', ['pairwise comparisons can actually be quite good.']),
+      talk('34:00', '34:10', [
+        'As long as it satisfies what we talked about, it has like low variance,',
+        "a human grader can kind of distinguish between these two grades. That's totally fine.",
+      ]),
+      { guide: 'develop-tests', section: 'Tips for LLM-based grading', anchor: 'tips-for-llm-based-grading' },
+    ],
+    scope: 'all',
+    appliesTo: ALL_MODELS,
+    note: 'The linked guide also accepts a scale such as 1–5 when the rubric is detailed and clear, as does the talk for a scale whose grades a person can tell apart (34:00–34:10). The rule replaces only scales that leave their levels undefined.',
+  },
+
   // --- Prompting Claude Fable 5.2 ---------------------------------------------
   // Owner-requested rule 1.
   {
@@ -202,7 +370,7 @@ const RULES: PromptRule[] = [
       { guide: 'fable-5-2', section: 'Keep caution from piling up', anchor: 'keep-caution-from-piling-up' },
       {
         guide: 'fable-5-2',
-        section: 'Review instructions written for earlier models',
+        section: 'Review prompts and harnesses designed for earlier models',
         anchor: 'review-instructions-written-for-earlier-models',
       },
     ],
@@ -217,7 +385,7 @@ const RULES: PromptRule[] = [
     sources: [
       {
         guide: 'fable-5-2',
-        section: 'Review instructions written for earlier models',
+        section: 'Review prompts and harnesses designed for earlier models',
         anchor: 'review-instructions-written-for-earlier-models',
       },
     ],
@@ -470,7 +638,7 @@ const RULES: PromptRule[] = [
     id: 'haiku-search-date',
     title: 'Give the date with a search tool',
     instruction:
-      'When the prompt gives the model a search tool, include today\'s date, as the placeholder [current date] if the draft gives none. Have the prompt say that records, prices, versions, rules and anything "latest" may have changed since the model\'s training, so it searches for those before it answers. Do not use a blanket instruction to search for every factual question.',
+      'When the prompt gives the model a search tool, include today\'s date, as the placeholder [current date] if the draft gives none, filled in once when the conversation starts and placed after the instructions that never change. Have the prompt say that records, prices, versions, rules and anything "latest" may have changed since the model\'s training, so it searches for those before it answers. Do not use a blanket instruction to search for every factual question.',
     sources: [{ guide: 'haiku-5-5', section: 'Accurate search results', anchor: 'accurate-search-results' }],
     scope: 'claude-haiku-5-5',
     appliesTo: 'Claude Haiku 5.5',
@@ -526,6 +694,12 @@ const GENERAL_RULE_IDS = [
 ];
 
 /**
+ * The rules from Lance Martin's talk. They hold across models, so every target
+ * gets them, after its own model's rules.
+ */
+const TALK_RULE_IDS = ['talk-try-harder-lines', 'talk-contradictions', 'talk-stable-prefix', 'talk-grader-checks'];
+
+/**
  * "Write the exception into the rule" comes from the Claude Fable 5.2 guide,
  * the only guide that states it. The owner of this tool wants it applied to
  * every target, so it is listed for all of them; for the others the UI says
@@ -543,6 +717,7 @@ const TARGET_RULE_IDS: Record<TargetModel, string[]> = {
     'fable-code-ownership',
     'fable-progress-updates',
     'fable-readable-report',
+    ...TALK_RULE_IDS,
     ...GENERAL_RULE_IDS,
   ],
   'claude-opus-5-5': [
@@ -553,6 +728,7 @@ const TARGET_RULE_IDS: Record<TargetModel, string[]> = {
     'opus-explore-first',
     'opus-progress-updates',
     'opus-frontend-patterns',
+    ...TALK_RULE_IDS,
     ...GENERAL_RULE_IDS,
   ],
   'claude-sonnet-5-5': [
@@ -566,6 +742,7 @@ const TARGET_RULE_IDS: Record<TargetModel, string[]> = {
     'sonnet-progress-updates',
     'sonnet-no-think-less',
     'sonnet-no-reasoning-in-reply',
+    ...TALK_RULE_IDS,
     ...GENERAL_RULE_IDS,
   ],
   'claude-haiku-5-5': [
@@ -575,9 +752,10 @@ const TARGET_RULE_IDS: Record<TargetModel, string[]> = {
     'haiku-search-date',
     'haiku-hold-system-prompt',
     'haiku-no-think-less',
+    ...TALK_RULE_IDS,
     ...GENERAL_RULE_IDS,
   ],
-  generic: ['bp-finish-task', EXCEPTION_RULE_ID, ...GENERAL_RULE_IDS],
+  generic: ['bp-finish-task', EXCEPTION_RULE_ID, ...TALK_RULE_IDS, ...GENERAL_RULE_IDS],
 };
 
 export function rulesForTarget(target: TargetModel): PromptRule[] {
@@ -595,7 +773,11 @@ export function isOutsideScope(rule: PromptRule, target: TargetModel): boolean {
 
 export interface TargetInfo {
   label: string;
-  /** The guides whose rules the meta-prompt uses for this target, most specific first. */
+  /**
+   * The prompting guides whose rules the meta-prompt uses for this target, most
+   * specific first. Every target also gets the talk-sourced rules, whose
+   * supporting pages (CROSS_MODEL_GUIDES) are not listed here.
+   */
   guides: GuideId[];
 }
 

@@ -29,6 +29,8 @@ Keep what the model cannot work out for itself: the goal, who or what the result
 
 Cut what a capable model does not need: filler, flattery, role-play boilerplate that changes nothing, restated common sense, and step-by-step procedure it would arrive at anyway. Keep a procedure only when the order of steps is itself a requirement, as in a fixed SOP, a compliance process, or an integration contract.
 
+A draft that has been in use for a while often carries lines written for older models or for problems that no longer occur, and lines that have come to contradict each other. Read it as an audit: each line should still do something for the model the prompt will run on. Removing a line is about fit, not length; context that only the author knows always stays.
+
 Carry every concrete detail across exactly as written: names, identifiers, URLs, numbers, code, file paths, quoted text. A refined prompt that loses a specific is worse than the draft.
 
 Do not invent requirements. Word counts, output formats, tone rules, and extra steps the user never asked for narrow the result without their consent. When the draft leaves something open, let the receiving model decide. If a wrong guess there would be costly, put a bracketed placeholder such as [target audience] in the prompt and mention it in the analysis.
@@ -39,7 +41,7 @@ Match the shape to the content. A simple request becomes a few clear sentences. 
 
 If the draft is already focused, change little and say so. Improving a prompt sometimes means leaving most of it alone.
 
-The <target_model> section lists rules from the published prompting guidance for the model the prompt will run on. Apply a rule where the draft meets the condition the rule states, and only there. Some rules add a sentence to the prompt, or remove a line from it, that the draft did not ask for. That is their purpose, and it is the one exception to not inventing requirements. A rule is not a licence to make up task details: when a rule needs a fact the draft does not give, use a bracketed placeholder.
+The <target_model> section lists rules for the model the prompt will run on, from Anthropic's published prompting guidance and from an Anthropic talk on prompts written for older models. Apply a rule where the draft meets the condition the rule states, and only there. Some rules add a sentence to the prompt, or remove a line from it, that the draft did not ask for. That is their purpose, and it is the one exception to not inventing requirements. A rule is not a licence to make up task details: when a rule needs a fact the draft does not give, use a bracketed placeholder.
 </approach>
 
 <images>
@@ -65,7 +67,7 @@ The refined prompt, ready to paste, with no commentary and no surrounding code f
 
 The <target_model> section gives the exact opening tag for the rationale block. The rationale lets the user check each change against its source. The app shows it beside the prompt and never copies it with the prompt, so the refined prompt must be complete without it and must not refer to it.
 
-Write one <change> for each distinct edit you made, the most significant first. Its rule attribute is the id of the rule in <target_model> that the edit rests on. An edit that rests on the approach above and on no listed rule takes rule="${REFINER_EDIT_RULE}". Cite a rule only for an edit that is in the refined prompt; leave out rules you considered and did not use. Do not write document names, section names or links in the rationale: the app attaches the source to each rule id, and an id that is not in the list has no source to show. If you changed nothing, leave the block empty.
+Write one <change> for each distinct edit you made, the most significant first. Its rule attribute is the id of the rule in <target_model> that the edit rests on; if several rules support the edit, cite the one written most specifically for the target model. An edit that rests on the approach above and on no listed rule takes rule="${REFINER_EDIT_RULE}". Cite a rule only for an edit that is in the refined prompt; leave out rules you considered and did not use. Do not write document names, section names or links in the rationale: the app attaches the source to each rule id, and an id that is not in the list has no source to show. If you changed nothing, leave the block empty.
 
 The app locates these tags to lay out the result, so write them exactly as shown and do not use them inside the prompt itself.
 </output_format>`;
@@ -78,8 +80,8 @@ The app locates these tags to lay out the result, so write them exactly as shown
 export function buildTargetSection(target: TargetModel): string {
   const intro =
     target === 'generic'
-      ? 'No particular model is targeted. The refined prompt may be run on any current Claude model, so the rules below are the ones that hold across those models.'
-      : `The refined prompt will be run on ${TARGETS[target].label}. The rules below are the ones from Anthropic's prompting guidance that apply when writing for that model.`;
+      ? 'No particular model is targeted. The refined prompt may be run on any current Claude model, so the rules below are the ones that hold across those models, from Anthropic\'s prompting guidance and from an Anthropic talk on prompts written for older models.'
+      : `The refined prompt will be run on ${TARGETS[target].label}. The rules below are the ones that apply when writing for that model, from Anthropic's prompting guidance and from an Anthropic talk on prompts written for older models.`;
   const rules = rulesForTarget(target)
     .map((rule) => `[${rule.id}] ${rule.instruction}`)
     .join('\n\n');

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
-import type { RefineRequest } from '../../shared/protocol';
+import type { RefineRequest, Usage } from '../../shared/protocol';
 import { streamRefine } from '../lib/refineClient';
 import { RefineError } from '../lib/refineError';
 import type { RefineStatus } from '../types';
@@ -13,12 +13,14 @@ interface RefineState {
   error: string | null;
   /** The answer ran into the output-token ceiling. */
   truncated: boolean;
+  /** Token counts of the finished request; null until it finishes, and for results from history. */
+  usage: Usage | null;
 }
 
 type Action =
   | { type: 'start' }
   | { type: 'append'; text: string; thinking: string }
-  | { type: 'finish'; truncated: boolean }
+  | { type: 'finish'; truncated: boolean; usage: Usage | null }
   | { type: 'stop' }
   | { type: 'fail'; message: string; discardOutput: boolean }
   | { type: 'show'; output: string }
@@ -30,6 +32,7 @@ const initialState: RefineState = {
   thinking: '',
   error: null,
   truncated: false,
+  usage: null,
 };
 
 function reducer(state: RefineState, action: Action): RefineState {
@@ -43,7 +46,7 @@ function reducer(state: RefineState, action: Action): RefineState {
         thinking: state.thinking + action.thinking,
       };
     case 'finish':
-      return { ...state, status: 'complete', truncated: action.truncated };
+      return { ...state, status: 'complete', truncated: action.truncated, usage: action.usage };
     case 'stop':
       return { ...state, status: state.output ? 'stopped' : 'idle' };
     case 'fail':
@@ -106,6 +109,7 @@ export function useRefine(onComplete: (result: RefineResult) => void) {
     try {
       let model = '';
       let truncated = false;
+      let usage: Usage | null = null;
       await streamRefine(
         request,
         (event) => {
@@ -117,13 +121,14 @@ export function useRefine(onComplete: (result: RefineResult) => void) {
           } else if (event.type === 'done') {
             model = event.model;
             truncated = event.truncated;
+            usage = event.usage;
           }
           frame ||= requestAnimationFrame(flush);
         },
         controller.signal,
       );
       settle();
-      dispatch({ type: 'finish', truncated });
+      dispatch({ type: 'finish', truncated, usage });
       if (fullOutput.trim()) onCompleteRef.current({ output: fullOutput, model });
     } catch (error) {
       settle();
