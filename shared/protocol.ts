@@ -47,6 +47,10 @@ export const LIMITS = {
   maxTotalImageBytes: 20 * 1024 * 1024,
   /** The browser downscales anything larger than this on its longest edge. */
   maxImageEdge: 2000,
+  /** Most earlier sessions one refinement can build on. */
+  maxReferences: 5,
+  /** Ceiling on the text of all referenced sessions together, in characters. */
+  maxReferenceChars: 100_000,
 } as const;
 
 export interface RefineImage {
@@ -55,9 +59,25 @@ export interface RefineImage {
   data: string;
 }
 
+/**
+ * An earlier refinement the user chose to build on: what they asked for then
+ * and what came out. The reasoning summary and the rationale are left out;
+ * they explain the earlier edit and add nothing a new edit needs.
+ */
+export interface RefineReference {
+  /** The draft of that session. Empty when it was images only. */
+  originalPrompt: string;
+  /** The analysis shown with that result. Empty when there was none. */
+  analysis: string;
+  /** The refined prompt that session produced. */
+  refinedPrompt: string;
+}
+
 export interface RefineRequest {
   inputText: string;
   images: RefineImage[];
+  /** Earlier sessions to build on, oldest first. Absent or empty means a fresh refinement. */
+  references?: RefineReference[];
   effort?: EffortLevel;
   /** Absent means DEFAULT_TARGET. */
   targetModel?: TargetModel;

@@ -12,7 +12,9 @@ function isHistoryItem(value: unknown): value is HistoryItem {
     typeof item.id === 'string' &&
     typeof item.originalPrompt === 'string' &&
     typeof item.refinedPrompt === 'string' &&
-    typeof item.timestamp === 'number'
+    typeof item.timestamp === 'number' &&
+    (item.basedOn === undefined ||
+      (Array.isArray(item.basedOn) && item.basedOn.every((id) => typeof id === 'string')))
   );
 }
 

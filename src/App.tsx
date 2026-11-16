@@ -1,13 +1,16 @@
-import { ImagePlus, Loader2, Square, Wand2 } from 'lucide-react';
-import { type DragEvent, type KeyboardEvent, useCallback, useRef, useState } from 'react';
+import { ImagePlus, Loader2, MessageSquarePlus, Square, Wand2 } from 'lucide-react';
+import { type DragEvent, type KeyboardEvent, useCallback, useMemo, useRef, useState } from 'react';
 import { DEFAULT_TARGET } from '../shared/defaults';
 import { type EffortLevel, LIMITS, type TargetModel, isEffortLevel, isTargetModel } from '../shared/protocol';
+import { referenceLength, toReference } from '../shared/references';
 import ApiKeyDialog from './components/ApiKeyDialog';
 import BuildStamp, { hasBuildStamp } from './components/BuildStamp';
 import EffortSelect from './components/EffortSelect';
 import Header from './components/Header';
 import HistorySidebar from './components/HistorySidebar';
-import ImageUploader from './components/ImageUploader';
+import ImageUploader, { ADD_ENTRY_CLASS } from './components/ImageUploader';
+import ReferenceChips from './components/ReferenceChips';
+import ReferencePicker from './components/ReferencePicker';
 import RefineOutput from './components/RefineOutput';
 import TargetSelect from './components/TargetSelect';
 import { useApiKey } from './hooks/useApiKey';
@@ -57,20 +60,49 @@ export default function App() {
   const attachments = useImageAttachments();
   const { history, add: addToHistory, remove, clear, importItems } = useHistory();
 
-  // The draft as it was when "Refine" was pressed, so later edits to the text
-  // box do not change what gets saved alongside the result.
+  // Earlier sessions the next refinement builds on. Only ids are kept, and the
+  // sessions are looked up in history, so one that is deleted there drops out
+  // of the selection by itself. Oldest first: the order the model is told to expect.
+  const [referenceIds, setReferenceIds] = useState<string[]>([]);
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const referencedSessions = useMemo(() => {
+    const chosen = new Set(referenceIds);
+    return history.filter((item) => chosen.has(item.id)).sort((a, b) => a.timestamp - b.timestamp);
+  }, [history, referenceIds]);
+  const references = useMemo(() => referencedSessions.map(toReference), [referencedSessions]);
+  const referenceChars = references.reduce((total, reference) => total + referenceLength(reference), 0);
+  const referencesOverLimit = referenceChars > LIMITS.maxReferenceChars;
+
+  const toggleReference = (id: string) => {
+    const current = referencedSessions.map((session) => session.id);
+    if (current.includes(id)) setReferenceIds(current.filter((other) => other !== id));
+    else if (current.length < LIMITS.maxReferences) setReferenceIds([...current, id]);
+  };
+  const closePicker = useCallback(() => setIsPickerOpen(false), []);
+
+  // The draft and the references as they were when "Refine" was pressed, so
+  // later changes in the input panel do not change what gets saved alongside
+  // the result.
   const submittedDraft = useRef('');
+  const submittedReferenceIds = useRef<string[]>([]);
   const handleComplete = useCallback(
     ({ output, model }: RefineResult) => {
-      addToHistory({ originalPrompt: submittedDraft.current, refinedPrompt: output, model });
+      const basedOn = submittedReferenceIds.current;
+      addToHistory({
+        originalPrompt: submittedDraft.current,
+        refinedPrompt: output,
+        model,
+        ...(basedOn.length > 0 ? { basedOn } : {}),
+      });
     },
     [addToHistory],
   );
   const refiner = useRefine(handleComplete);
 
   const isGenerating = refiner.status === 'generating';
-  const canRefine = !isGenerating && (inputText.trim().length > 0 || attachments.images.length > 0);
+  const hasInput = inputText.trim().length > 0 || attachments.images.length > 0;
   const overLimit = inputText.length > LIMITS.maxInputChars;
+  const canRefine = !isGenerating && hasInput && !overLimit && !referencesOverLimit;
 
   // Stop takes the place of the Refine button, so the second click of an
   // accidental double-click would land on it and cancel the request at once.
@@ -81,6 +113,7 @@ export default function App() {
 
   const submit = () => {
     submittedDraft.current = inputText;
+    submittedReferenceIds.current = referencedSessions.map((session) => session.id);
     startedAt.current = performance.now();
     void refiner.refine({
       inputText,
@@ -88,6 +121,7 @@ export default function App() {
         mediaType: image.mediaType,
         data: dataUrlToBase64(image.dataUrl),
       })),
+      references,
       effort,
       targetModel,
     });
@@ -112,7 +146,7 @@ export default function App() {
   };
 
   const handleRefine = () => {
-    if (!canRefine || overLimit) return;
+    if (!canRefine) return;
     if (DIRECT_MODE && !apiKey.hasKey) {
       resumeAfterKey.current = true;
       setIsKeyDialogOpen(true);
@@ -129,10 +163,12 @@ export default function App() {
   };
 
   const handleStartOver = () => {
-    const hasWork = inputText || attachments.images.length > 0 || refiner.output;
+    const hasWork =
+      inputText || attachments.images.length > 0 || referencedSessions.length > 0 || refiner.output;
     if (hasWork && !window.confirm('Are you sure you want to clear everything and start over?')) return;
     setInputText('');
     attachments.clear();
+    setReferenceIds([]);
     refiner.reset();
   };
 
@@ -140,6 +176,7 @@ export default function App() {
     if (isGenerating) return;
     setInputText(item.originalPrompt);
     attachments.clear(); // History keeps text only; images are too heavy for localStorage.
+    setReferenceIds(item.basedOn ?? []); // The sessions it was built on, as far as they still exist.
     refiner.show(item.refinedPrompt);
     setIsHistoryOpen(false);
   };
@@ -163,6 +200,17 @@ export default function App() {
   };
 
   const closeHistory = useCallback(() => setIsHistoryOpen(false), []);
+
+  // The line under the controls: what is attached to the draft.
+  const inputSummary =
+    [
+      attachments.images.length > 0 ? `${attachments.images.length} image(s) attached` : '',
+      referencedSessions.length > 0 ? `${referencedSessions.length} earlier session(s) referenced` : '',
+      // References are what a refinement builds on; there still has to be something new to refine.
+      referencedSessions.length > 0 && !hasInput ? 'add your new input above' : '',
+    ]
+      .filter(Boolean)
+      .join(' · ') || 'Paste or drop images directly';
 
   const handleDrop = (event: DragEvent) => {
     if (!hasFiles(event)) return;
@@ -194,6 +242,15 @@ export default function App() {
           onClose={closeKeyDialog}
         />
       )}
+
+      <ReferencePicker
+        isOpen={isPickerOpen}
+        history={history}
+        selectedIds={referencedSessions.map((session) => session.id)}
+        onToggle={toggleReference}
+        onClear={() => setReferenceIds([])}
+        onClose={closePicker}
+      />
 
       <HistorySidebar
         isOpen={isHistoryOpen}
@@ -243,7 +300,7 @@ export default function App() {
                 autoFocus
                 aria-label="Draft prompt"
                 placeholder="Describe what you want the AI to do... (e.g., 'Write a blog post about coffee', 'Analyze this dashboard screenshot')"
-                className="w-full flex-1 resize-none bg-transparent p-0 text-base leading-relaxed text-slate-300 placeholder-slate-600 outline-none"
+                className="min-h-[4.5rem] w-full flex-1 resize-none bg-transparent p-0 text-base leading-relaxed text-slate-300 placeholder-slate-600 outline-none"
               />
 
               <ImageUploader
@@ -252,6 +309,22 @@ export default function App() {
                 disabled={isGenerating}
                 onAddFiles={attachments.addFiles}
                 onRemove={attachments.remove}
+                attachments={
+                  <ReferenceChips sessions={referencedSessions} disabled={isGenerating} onRemove={toggleReference} />
+                }
+                actions={
+                  <button
+                    type="button"
+                    onClick={() => setIsPickerOpen(true)}
+                    disabled={isGenerating}
+                    aria-haspopup="dialog"
+                    title="Build on earlier refinements from your history"
+                    className={ADD_ENTRY_CLASS}
+                  >
+                    <MessageSquarePlus size={16} aria-hidden />
+                    <span>Add Reference Session</span>
+                  </button>
+                }
               />
             </div>
 
@@ -261,12 +334,12 @@ export default function App() {
               <div className="flex min-w-0 flex-[1_1_13rem] flex-col gap-3">
                 <TargetSelect value={targetModel} disabled={isGenerating} onChange={handleTargetChange} />
                 <EffortSelect value={effort} disabled={isGenerating} onChange={handleEffortChange} />
-                <span className={`text-xs ${overLimit ? 'text-red-400' : 'text-slate-500'}`}>
+                <span className={`text-xs ${overLimit || referencesOverLimit ? 'text-red-400' : 'text-slate-500'}`}>
                   {overLimit
                     ? `Draft is too long (${inputText.length.toLocaleString()} / ${LIMITS.maxInputChars.toLocaleString()} characters)`
-                    : attachments.images.length > 0
-                      ? `${attachments.images.length} image(s) attached`
-                      : 'Paste or drop images directly'}
+                    : referencesOverLimit
+                      ? `Referenced sessions are too long together (${referenceChars.toLocaleString()} / ${LIMITS.maxReferenceChars.toLocaleString()} characters). Remove one.`
+                      : inputSummary}
                 </span>
               </div>
 
@@ -288,7 +361,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={handleRefine}
-                  disabled={!canRefine || overLimit}
+                  disabled={!canRefine}
                   className="flex shrink-0 items-center gap-2 rounded-xl bg-brand-600 px-6 py-3 font-semibold text-white shadow-lg shadow-brand-900/20 transition-all hover:scale-[1.02] hover:bg-brand-500 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400 disabled:hover:scale-100"
                 >
                   <Wand2 className="h-5 w-5" aria-hidden />

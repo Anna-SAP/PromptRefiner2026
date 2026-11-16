@@ -51,7 +51,7 @@ npm run dev
 | `npm start` | 生产模式：先 `npm run build`，再用它提供服务 |
 | `npm run build:pages` | 构建在线版（纯静态、浏览器直连）到 `dist/` |
 | `npm run typecheck` | TypeScript 类型检查 |
-| `npm test` | 单元测试（输出解析器、rationale 解析、规则目录、请求校验） |
+| `npm test` | 单元测试（输出解析器、rationale 解析、会话引用、规则目录、请求校验） |
 | `npm run check:links` | 联网检查规则目录里每条文档链接：页面可访问，且存在对应章节锚点和标题 |
 | `npm run check:quotes -- <转录文件>` | 逐字核对视频来源的引文：每段引文都必须出现在转录中所注时间段内（转录文件不在仓库里，需自备） |
 
@@ -62,7 +62,8 @@ npm run dev
 - **改动依据（rationale）**：每处改动列出四项——改了什么、依据哪条规则、来源（官方文档的章节链接，或视频的时间段链接加转录原话）、适用哪个模型。这一块只在界面上显示，「Copy Prompt」和「Copy Full Text」都不包含它。
 - **用量与缓存命中**：每次精炼完成后，结果下方显示本次输入、输出的 token 数，以及输入中有多少是从提示词缓存读取的。元提示词对同一目标模型的每次请求都相同，所以连续精炼时应当大部分命中缓存；缓存读取按普通输入价格的一小部分计费。历史记录不保存这一行。
 - **多模态图片**：点击选择、粘贴或拖拽图片作为参考。过大的图片会在浏览器内自动缩小到 2000px 以内。
-- **历史记录**：保存在浏览器 `localStorage`，最多 50 条；支持搜索、单条删除、清空、导出与导入 JSON。
+- **引用之前的优化会话**（可选）：点击输入框下方的「Add Reference Session」，从历史记录中勾选一条或多条（最多 5 条）之前的优化会话作为基础。精炼时，所选会话的原始输入、Analysis 和 Refined Prompt 会连同本次新输入（文本和图片）一起交给模型，由它综合给出一份完整的最终提示词。新输入可以是新的草稿，也可以只是一句修改说明（如「改成表格输出」）；新输入与之前的会话冲突时以新输入为准，较晚的会话优先于较早的。「Why these changes」和推理摘要不会传给模型。仍然需要有新的文本或图片才能精炼。所选会话合计上限 100,000 字符。
+- **历史记录**：保存在浏览器 `localStorage`，最多 50 条；支持搜索、单条删除、清空、导出与导入 JSON。引用了之前会话的记录会标注「Built on N earlier session(s)」，重新打开时会恢复仍然存在的引用。
 - **思考过程摘要**：Claude 思考时实时显示推理摘要，等待不再是空白。
 - **思考深度**：Quick / Balanced / Deep 三档，对应 Claude 的 `effort` 参数（low / medium / high）。Deep（high）是 Anthropic 对 Claude Fable 5.2 的官方推荐起点；Balanced（medium）仍是本工具的日常默认。effort 决定 Claude 思考多少，不改变结果的长度。选择器下方会显示当前档位的一句说明，鼠标悬停或键盘聚焦到其他档位时可预览其说明。
 - **随时停止**：生成中可中断，服务端会同步取消对 Claude 的请求，不再继续计费。
@@ -173,6 +174,7 @@ shared/           服务端与浏览器共用
   errors.ts       SDK 错误到用户提示的映射
   parseOutput.ts  把模型输出解析为 analysis + prompt（支持流式与旧格式）
   parseRationale.ts  把 <rationale> 块从回答末尾切下并解析为逐条改动（只用于界面显示）
+  references.ts   把历史记录里的一次会话转成可供后续精炼引用的内容（草稿 + analysis + prompt）
   defaults.ts     默认模型、思考深度、目标模型、输出上限
 server/           自托管模式
   index.ts        Express 启动；开发时挂载 Vite，生产时提供 dist/
@@ -180,7 +182,7 @@ server/           自托管模式
   config.ts       环境变量
 src/
   App.tsx
-  components/     Header、HistorySidebar、ImageUploader、RefineOutput、RationalePanel、TargetSelect、EffortSelect、ApiKeyDialog
+  components/     Header、HistorySidebar、ImageUploader、ReferencePicker、ReferenceChips、RefineOutput、RationalePanel、TargetSelect、EffortSelect、ApiKeyDialog
   hooks/          useRefine、useHistory、useImageAttachments、useApiKey、useAppConfig、useCopy
   lib/
     refineClient.ts   按构建模式选择传输方式；自托管模式的 SSE 客户端
@@ -188,6 +190,7 @@ src/
     apiKey.ts         在线版：用户 Key 的本地存取
     mode.ts           构建模式开关
     images.ts         图片压缩
+    sessionLabel.ts   历史会话在列表中的日期与标题显示
 scripts/
   check-rule-links.ts   联网检查 rules.ts 里的文档链接和章节锚点
   check-talk-quotes.ts  对照演讲转录逐字核对 rules.ts 里的引文和时间段
