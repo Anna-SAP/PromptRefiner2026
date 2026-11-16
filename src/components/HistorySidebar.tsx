@@ -1,5 +1,6 @@
-import { ChevronRight, Clock, Download, MessageSquare, Search, Trash2, Upload, X } from 'lucide-react';
+import { ChevronRight, Clock, Download, Link2, MessageSquare, Search, Trash2, Upload, X } from 'lucide-react';
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { sessionDateFormat, sessionTitle } from '../lib/sessionLabel';
 import type { HistoryItem } from '../types';
 
 interface HistorySidebarProps {
@@ -12,13 +13,6 @@ interface HistorySidebarProps {
   /** Merges a parsed backup file into history; returns how many items were new. */
   onImport: (value: unknown) => number;
 }
-
-const dateFormat = new Intl.DateTimeFormat(undefined, {
-  month: 'short',
-  day: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit',
-});
 
 function downloadJson(filename: string, value: unknown) {
   const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' }));
@@ -157,14 +151,20 @@ export default function HistorySidebar({
                   >
                     <span className="flex items-center gap-1.5 font-mono text-xs text-brand-400">
                       <Clock size={12} aria-hidden />
-                      {dateFormat.format(item.timestamp)}
+                      {sessionDateFormat.format(item.timestamp)}
                     </span>
                     <span className="flex gap-2">
                       <MessageSquare size={16} className="mt-0.5 shrink-0 text-slate-500" aria-hidden />
                       <span className="line-clamp-2 text-sm leading-relaxed break-words text-slate-300">
-                        {item.originalPrompt || 'Image only request'}
+                        {sessionTitle(item)}
                       </span>
                     </span>
+                    {item.basedOn && item.basedOn.length > 0 && (
+                      <span className="flex items-center gap-1.5 text-xs text-slate-500">
+                        <Link2 size={12} aria-hidden />
+                        Built on {item.basedOn.length} earlier {item.basedOn.length === 1 ? 'session' : 'sessions'}
+                      </span>
+                    )}
                     <ChevronRight
                       size={16}
                       aria-hidden

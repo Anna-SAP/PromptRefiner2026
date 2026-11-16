@@ -17,4 +17,6 @@ export interface HistoryItem {
   timestamp: number;
   /** Which model produced it. Absent on items saved by the Gemini-era app. */
   model?: string;
+  /** Ids of the earlier sessions this one was built on. Absent for a fresh refinement. */
+  basedOn?: string[];
 }

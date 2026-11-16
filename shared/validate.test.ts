@@ -4,6 +4,7 @@ import { LIMITS, TARGET_MODELS } from './protocol';
 import { validateRefineRequest } from './validate';
 
 const PNG = { mediaType: 'image/png', data: 'iVBORw0KGgo=' };
+const SESSION = { originalPrompt: 'Write a haiku', analysis: 'Tightened.', refinedPrompt: 'Write a haiku about rain.' };
 
 function messageOf(body: unknown): string {
   const result = validateRefineRequest(body);
@@ -16,7 +17,7 @@ describe('validateRefineRequest', () => {
     const result = validateRefineRequest({ inputText: 'Write a haiku' });
     assert.deepEqual(result, {
       ok: true,
-      value: { inputText: 'Write a haiku', images: [], effort: undefined, targetModel: undefined },
+      value: { inputText: 'Write a haiku', images: [], references: [], effort: undefined, targetModel: undefined },
     });
   });
 
@@ -75,5 +76,40 @@ describe('validateRefineRequest', () => {
   it('rejects an unknown target model', () => {
     assert.match(messageOf({ inputText: 'x', targetModel: 'gpt-9' }), /targetModel/);
     assert.match(messageOf({ inputText: 'x', targetModel: 'Claude Fable 5.2' }), /targetModel/);
+  });
+
+  it('accepts earlier sessions and keeps only their known fields', () => {
+    const result = validateRefineRequest({
+      inputText: 'Make it shorter',
+      references: [{ ...SESSION, id: 'abc', timestamp: 1 }, { refinedPrompt: 'Only a result' }],
+    });
+    assert.deepEqual(result.ok && result.value.references, [
+      SESSION,
+      { originalPrompt: '', analysis: '', refinedPrompt: 'Only a result' },
+    ]);
+  });
+
+  it('still needs new input when earlier sessions are referenced', () => {
+    assert.match(messageOf({ inputText: ' ', references: [SESSION] }), /draft prompt or at least one image/);
+  });
+
+  it('rejects malformed earlier sessions', () => {
+    assert.match(messageOf({ inputText: 'x', references: 'abc' }), /"references" must be an array/);
+    assert.match(messageOf({ inputText: 'x', references: [null] }), /Earlier session 1 is malformed/);
+    assert.match(messageOf({ inputText: 'x', references: [{ ...SESSION, analysis: 7 }] }), /Earlier session 1 is malformed/);
+    assert.match(
+      messageOf({ inputText: 'x', references: [SESSION, { ...SESSION, refinedPrompt: '  ' }] }),
+      /Earlier session 2 has no refined prompt/,
+    );
+  });
+
+  it('rejects too many earlier sessions', () => {
+    const references = Array.from({ length: LIMITS.maxReferences + 1 }, () => SESSION);
+    assert.match(messageOf({ inputText: 'x', references }), /Too many earlier sessions/);
+  });
+
+  it('rejects earlier sessions that are too long in total', () => {
+    const half = { ...SESSION, refinedPrompt: 'a'.repeat(LIMITS.maxReferenceChars / 2) };
+    assert.match(messageOf({ inputText: 'x', references: [half, half] }), /too long in total/);
   });
 });
