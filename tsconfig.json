@@ -18,5 +18,5 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "include": ["src", "server", "shared", "scripts", "vite.config.ts"]
+  "include": ["src", "server", "shared", "scripts", "eval", "vite.config.ts"]
 }

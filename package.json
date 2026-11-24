@@ -13,7 +13,9 @@
     "build:pages": "cross-env VITE_DIRECT_API=true vite build --base=./",
     "start": "cross-env NODE_ENV=production tsx server/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test shared/parseOutput.test.ts shared/parseRationale.test.ts shared/references.test.ts shared/rules.test.ts shared/validate.test.ts src/lib/buildTime.test.ts",
+    "test": "tsx --test shared/parseOutput.test.ts shared/parseRationale.test.ts shared/references.test.ts shared/rules.test.ts shared/validate.test.ts src/lib/buildTime.test.ts eval/checks.test.ts eval/cases.test.ts eval/run.test.ts",
+    "eval": "tsx eval/cli.ts",
+    "eval:live": "tsx eval/cli.ts --live",
     "check:links": "tsx scripts/check-rule-links.ts",
     "check:quotes": "tsx scripts/check-talk-quotes.ts"
   },
