@@ -30,3 +30,6 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 *.sw?
+
+# Live eval results (eval/baseline.json is committed on purpose)
+eval/results/
