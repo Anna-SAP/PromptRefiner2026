@@ -58,7 +58,18 @@ export default function App() {
   const [targetModel, setTargetModel] = useState<TargetModel>(readStoredTarget);
 
   const attachments = useImageAttachments();
-  const { history, add: addToHistory, remove, clear, importItems } = useHistory();
+  const {
+    history,
+    add: addToHistory,
+    remove,
+    clear,
+    importItems,
+    problem: historyProblem,
+    unsavedIds,
+  } = useHistory();
+  // The history entry the output panel is showing, so it can say when that
+  // entry could not be saved.
+  const [shownEntryId, setShownEntryId] = useState<string | null>(null);
 
   // Earlier sessions the next refinement builds on. Only ids are kept, and the
   // sessions are looked up in history, so one that is deleted there drops out
@@ -88,12 +99,13 @@ export default function App() {
   const handleComplete = useCallback(
     ({ output, model }: RefineResult) => {
       const basedOn = submittedReferenceIds.current;
-      addToHistory({
+      const entry = addToHistory({
         originalPrompt: submittedDraft.current,
         refinedPrompt: output,
         model,
         ...(basedOn.length > 0 ? { basedOn } : {}),
       });
+      setShownEntryId(entry.id);
     },
     [addToHistory],
   );
@@ -175,9 +187,10 @@ export default function App() {
   const handleSelectHistory = (item: HistoryItem) => {
     if (isGenerating) return;
     setInputText(item.originalPrompt);
-    attachments.clear(); // History keeps text only; images are too heavy for localStorage.
+    attachments.clear(); // History keeps text only; images are not saved.
     setReferenceIds(item.basedOn ?? []); // The sessions it was built on, as far as they still exist.
     refiner.show(item.refinedPrompt);
+    setShownEntryId(item.id);
     setIsHistoryOpen(false);
   };
 
@@ -260,6 +273,7 @@ export default function App() {
         onDelete={remove}
         onClearAll={clear}
         onImport={importItems}
+        problem={historyProblem}
       />
 
       {/* From lg up the two panels fill the viewport. Between lg and xl the
@@ -395,6 +409,7 @@ export default function App() {
                 error={refiner.error}
                 truncated={refiner.truncated}
                 usage={refiner.usage}
+                notSaved={refiner.status === 'complete' && shownEntryId !== null && unsavedIds.has(shownEntryId)}
               />
             </div>
           </section>

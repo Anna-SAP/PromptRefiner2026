@@ -1,7 +1,24 @@
-import { ChevronRight, Clock, Download, Link2, MessageSquare, Search, Trash2, Upload, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  ChevronRight,
+  Clock,
+  Download,
+  Link2,
+  MessageSquare,
+  Search,
+  Trash2,
+  Upload,
+  X,
+} from 'lucide-react';
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { sessionDateFormat, sessionTitle } from '../lib/sessionLabel';
 import type { HistoryItem } from '../types';
+
+/**
+ * Entries are listed this many at a time, newest first: history has no cap,
+ * and drawing thousands of entries at once makes the whole page slow.
+ */
+const PAGE_SIZE = 50;
 
 interface HistorySidebarProps {
   isOpen: boolean;
@@ -12,6 +29,8 @@ interface HistorySidebarProps {
   onClearAll: () => void;
   /** Merges a parsed backup file into history; returns how many items were new. */
   onImport: (value: unknown) => number;
+  /** Why history is not being saved or read right now; null when all is well. */
+  problem: string | null;
 }
 
 function downloadJson(filename: string, value: unknown) {
@@ -31,8 +50,10 @@ export default function HistorySidebar({
   onDelete,
   onClearAll,
   onImport,
+  problem,
 }: HistorySidebarProps) {
   const [query, setQuery] = useState('');
+  const [limit, setLimit] = useState(PAGE_SIZE);
   const [notice, setNotice] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -41,6 +62,7 @@ export default function HistorySidebar({
     if (!isOpen) return;
     // Each opening starts from the full list.
     setQuery('');
+    setLimit(PAGE_SIZE);
     setNotice(null);
     closeButtonRef.current?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
@@ -50,7 +72,8 @@ export default function HistorySidebar({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [isOpen, onClose]);
 
-  const visible = useMemo(() => {
+  // Search goes through every entry; only the listing is paged.
+  const matches = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (!needle) return history;
     return history.filter(
@@ -58,6 +81,8 @@ export default function HistorySidebar({
         item.originalPrompt.toLowerCase().includes(needle) || item.refinedPrompt.toLowerCase().includes(needle),
     );
   }, [history, query]);
+  const visible = matches.slice(0, limit);
+  const notShown = matches.length - visible.length;
 
   const handleExport = () => {
     downloadJson(`prompt-refiner-history-${new Date().toISOString().slice(0, 10)}.json`, history);
@@ -113,6 +138,16 @@ export default function HistorySidebar({
           </button>
         </div>
 
+        {problem && (
+          <p
+            role="alert"
+            className="flex items-start gap-2 border-b border-dark-border bg-amber-950/20 p-4 text-xs leading-relaxed text-amber-300"
+          >
+            <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden />
+            {problem}
+          </p>
+        )}
+
         {history.length > 0 && (
           <div className="border-b border-dark-border p-4">
             <label className="flex items-center gap-2 rounded-lg border border-dark-border bg-dark-bg/60 px-3 py-2 focus-within:border-brand-500/50">
@@ -120,7 +155,10 @@ export default function HistorySidebar({
               <input
                 type="search"
                 value={query}
-                onChange={(event) => setQuery(event.target.value)}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  setLimit(PAGE_SIZE);
+                }}
                 placeholder="Search history"
                 aria-label="Search history"
                 className="w-full bg-transparent text-sm text-slate-200 placeholder-slate-500 outline-none"
@@ -135,7 +173,7 @@ export default function HistorySidebar({
               <Clock size={48} className="opacity-20" aria-hidden />
               <p>No history yet</p>
             </div>
-          ) : visible.length === 0 ? (
+          ) : matches.length === 0 ? (
             <p className="pt-8 text-center text-sm text-slate-500">No entries match “{query.trim()}”.</p>
           ) : (
             <ul className="space-y-3">
@@ -183,6 +221,16 @@ export default function HistorySidebar({
                 </li>
               ))}
             </ul>
+          )}
+          {notShown > 0 && (
+            <button
+              type="button"
+              onClick={() => setLimit((current) => current + PAGE_SIZE)}
+              className="mt-3 w-full rounded-lg border border-dark-border py-2 text-xs font-medium text-slate-400 transition-colors hover:bg-dark-bg hover:text-slate-200"
+            >
+              Show {Math.min(PAGE_SIZE, notShown)} older {notShown === 1 ? 'entry' : 'entries'} ·{' '}
+              {notShown.toLocaleString()} not shown yet
+            </button>
           )}
         </div>
 
