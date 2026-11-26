@@ -5,6 +5,24 @@ import { toReference } from '../../shared/references';
 import { sessionDateFormat, sessionTitle } from '../lib/sessionLabel';
 import type { HistoryItem } from '../types';
 
+/**
+ * Sessions are listed this many at a time, newest first: history has no cap,
+ * and drawing thousands of sessions at once makes the dialog slow to open.
+ */
+const PAGE_SIZE = 50;
+
+// What a saved session would hand on, worked out once per entry: reading it
+// means parsing the whole answer.
+const handedOn = new WeakMap<HistoryItem, string>();
+function referenceResult(item: HistoryItem): string {
+  let result = handedOn.get(item);
+  if (result === undefined) {
+    result = toReference(item).refinedPrompt;
+    handedOn.set(item, result);
+  }
+  return result;
+}
+
 interface ReferencePickerProps {
   isOpen: boolean;
   history: HistoryItem[];
@@ -27,6 +45,7 @@ export default function ReferencePicker({
   onClose,
 }: ReferencePickerProps) {
   const [query, setQuery] = useState('');
+  const [limit, setLimit] = useState(PAGE_SIZE);
   const searchRef = useRef<HTMLInputElement>(null);
   const doneRef = useRef<HTMLButtonElement>(null);
 
@@ -34,6 +53,7 @@ export default function ReferencePicker({
     if (!isOpen) return;
     // Each opening starts from the full list.
     setQuery('');
+    setLimit(PAGE_SIZE);
     (searchRef.current ?? doneRef.current)?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
@@ -42,26 +62,30 @@ export default function ReferencePicker({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [isOpen, onClose]);
 
-  // What each session would hand on. A session whose answer came out empty
-  // has nothing to build on, so it is not offered.
-  const sessions = useMemo(
-    () =>
-      isOpen
-        ? history
-            .map((item) => ({ item, result: toReference(item).refinedPrompt }))
-            .filter((session) => session.result.length > 0)
-        : [],
-    [history, isOpen],
-  );
-
-  const visible = useMemo(() => {
+  // The sessions to list, newest first, going only as far into history as the
+  // page needs. A session whose answer came out empty has nothing to build on,
+  // so it is not offered. Search still reaches every session.
+  const { visible, hasSessions, hasMore } = useMemo(() => {
+    const found: { item: HistoryItem; result: string }[] = [];
+    let hasSessions = false;
+    let hasMore = false;
+    if (!isOpen) return { visible: found, hasSessions, hasMore };
     const needle = query.trim().toLowerCase();
-    if (!needle) return sessions;
-    return sessions.filter(
-      ({ item, result }) =>
-        item.originalPrompt.toLowerCase().includes(needle) || result.toLowerCase().includes(needle),
-    );
-  }, [sessions, query]);
+    for (const item of history) {
+      const result = referenceResult(item);
+      if (!result) continue;
+      hasSessions = true;
+      if (needle && !item.originalPrompt.toLowerCase().includes(needle) && !result.toLowerCase().includes(needle)) {
+        continue;
+      }
+      if (found.length === limit) {
+        hasMore = true;
+        break;
+      }
+      found.push({ item, result });
+    }
+    return { visible: found, hasSessions, hasMore };
+  }, [history, isOpen, query, limit]);
 
   if (!isOpen) return null;
 
@@ -101,14 +125,17 @@ export default function ReferencePicker({
             together with your new input, and writes a single result.
           </p>
 
-          {sessions.length > 0 && (
+          {hasSessions && (
             <label className="mt-4 flex items-center gap-2 rounded-lg border border-dark-border bg-dark-bg/60 px-3 py-2 focus-within:border-brand-500/50">
               <Search size={14} className="shrink-0 text-slate-500" aria-hidden />
               <input
                 ref={searchRef}
                 type="search"
                 value={query}
-                onChange={(event) => setQuery(event.target.value)}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  setLimit(PAGE_SIZE);
+                }}
                 placeholder="Search history"
                 aria-label="Search history"
                 className="w-full bg-transparent text-sm text-slate-200 placeholder-slate-500 outline-none"
@@ -118,7 +145,7 @@ export default function ReferencePicker({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-6">
-          {sessions.length === 0 ? (
+          {!hasSessions ? (
             <div className="flex flex-col items-center gap-3 py-10 text-center text-slate-500">
               <Clock size={40} className="opacity-20" aria-hidden />
               <p className="text-sm">No history yet. Refine a prompt first, then build on it from here.</p>
@@ -165,6 +192,15 @@ export default function ReferencePicker({
                 );
               })}
             </ul>
+          )}
+          {hasMore && (
+            <button
+              type="button"
+              onClick={() => setLimit((current) => current + PAGE_SIZE)}
+              className="mb-1 mt-2 w-full rounded-lg border border-dark-border py-2 text-xs font-medium text-slate-400 transition-colors hover:bg-dark-bg hover:text-slate-200"
+            >
+              Show older sessions
+            </button>
           )}
         </div>
 

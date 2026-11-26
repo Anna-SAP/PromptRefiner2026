@@ -14,6 +14,8 @@ interface RefineOutputProps {
   error: string | null;
   truncated: boolean;
   usage: Usage | null;
+  /** The result shown could not be saved to history. */
+  notSaved: boolean;
 }
 
 function CopyButton({ text, label, className }: { text: string; label: string; className: string }) {
@@ -90,7 +92,15 @@ function ThinkingPanel({ thinking, active }: { thinking: string; active: boolean
   );
 }
 
-export default function RefineOutput({ status, output, thinking, error, truncated, usage }: RefineOutputProps) {
+export default function RefineOutput({
+  status,
+  output,
+  thinking,
+  error,
+  truncated,
+  usage,
+  notSaved,
+}: RefineOutputProps) {
   const isStreaming = status === 'generating';
   // The rationale block is cut off first. Everything below that reads or
   // copies the analysis and the prompt works on `answer`, which has no
@@ -196,6 +206,14 @@ export default function RefineOutput({ status, output, thinking, error, truncate
 
         {status === 'stopped' && (
           <p className="mt-4 text-xs text-slate-500">Stopped before the result was complete. It was not saved to history.</p>
+        )}
+
+        {notSaved && (
+          <p role="status" className="mt-4 flex items-start gap-2 text-xs text-amber-400">
+            <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden />
+            This result could not be saved to history. It is kept until this tab closes; open History to see why, or
+            to export it.
+          </p>
         )}
 
         {truncated && (
